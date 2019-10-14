@@ -1,0 +1,1287 @@
+From 021a13e6c114c05ea8a1f260b85a944a82540128 Mon Sep 17 00:00:00 2001
+From: sandysun <sandysun@qiyi.com>
+Date: Tue, 20 Aug 2019 17:53:25 +0800
+Subject: [PATCH] =?UTF-8?q?IDPS=EF=BC=9Amake=20as=20a=20lib=20&=20support?=
+ =?UTF-8?q?=20kafka?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ configure.ac            |  23 +++
+ src/Makefile.am         | 531 +++++++++++++++++++++++++++++++++++++++++++++++-
+ src/decode.c            |   2 +
+ src/decode.h            |   3 +
+ src/output-json-alert.c |  34 +++-
+ src/output-json-http.c  |  37 ++++
+ src/output-json-http.h  |   1 +
+ src/output-json.c       |  31 +++
+ src/runmodes.c          |   2 +
+ src/runmodes.h          |   1 +
+ src/tm-modules.c        |   3 +-
+ src/tm-threads-common.h |   2 +
+ src/util-error.c        |   1 +
+ src/util-error.h        |   1 +
+ src/util-log-kafka.c    | 188 +++++++++++++++++
+ src/util-log-kafka.h    |  42 ++++
+ src/util-logopenfile.c  |  28 ++-
+ src/util-logopenfile.h  |  13 +-
+ 18 files changed, 934 insertions(+), 9 deletions(-)
+ create mode 100644 src/util-log-kafka.c
+ create mode 100644 src/util-log-kafka.h
+
+diff --git a/configure.ac b/configure.ac
+index 9a786ee50..1ff1ecb6c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2039,6 +2039,28 @@
+             [  --with-libevent-libraries=DIR    libevent library directory],
+             [with_libevent_libraries="$withval"],[with_libevent_libraries="no"])
+ 
++# librdkafka
++    AC_ARG_ENABLE(rdkafka,
++	        AS_HELP_STRING([--enable-rdkafka],[Enable Kafka support]),
++	        [ enable_rdkafka="yes"],
++	        [ enable_rdkafka="no"])
++			
++    if test "$enable_rdkafka" = "yes"; then
++        AC_CHECK_HEADER("librdkafka/rdkafka.h",RDKAFKA="yes",RDKAFKA="no")
++        if test "$RDKAFKA" = "yes"; then
++            AC_CHECK_LIB(rdkafka, rd_kafka_new,, RDKAFKA="no")
++        fi
++        if test "$RDKAFKA" = "no"; then
++            echo
++            echo "   ERROR!  librdkafka library not found, go get it"
++            echo "   from https://github.com/edenhill/librdkafka or your distribution:"
++            exit 1
++        fi
++        if test "$RDKAFKA" = "yes"; then
++            AC_DEFINE([HAVE_LIBRDKAFKA],[1],[librdkafka available])
++			enable_rdkafka="yes"
++		fi
++	fi
+ # libhiredis
+     AC_ARG_ENABLE(hiredis,
+ 	        AS_HELP_STRING([--enable-hiredis],[Enable Redis support]),
+@@ -2414,6 +2436,7 @@ SURICATA_BUILD_CONF="Suricata Configuration:
+   libnss support:                          ${enable_nss}
+   libnspr support:                         ${enable_nspr}
+   libjansson support:                      ${enable_jansson}
++  rdkafka support:                         ${enable_rdkafka}
+   liblzma support:                         ${enable_liblzma}
+   hiredis support:                         ${enable_hiredis}
+   hiredis async with libevent:             ${enable_hiredis_async}
+diff --git a/src/Makefile.am b/src/Makefile.am
+index 9a9f7ed88..ae4806847 100644
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -5,9 +5,530 @@ noinst_HEADERS = action-globals.h \
+ 	source-windivert-prototypes.h \
+ 	suricata-common.h threadvars.h tree.h \
+     util-binsearch.h util-validate.h
+-bin_PROGRAMS = suricata
+ 
+-suricata_SOURCES = \
++library_includedir = $(includedir)/suricata
++library_include_HEADERS = $(CONFIG_HEADER)
++library_include_HEADERS += action-globals.h \
++alert-debuglog.h \
++alert-fastlog.h \
++alert-prelude.h \
++alert-syslog.h \
++alert-unified2-alert.h \
++app-layer-dcerpc-common.h \
++app-layer-dcerpc.h \
++app-layer-dcerpc-udp.h \
++app-layer-detect-proto.h \
++app-layer-dhcp.h \
++app-layer-dnp3.h \
++app-layer-dnp3-objects.h \
++app-layer-dns-common.h \
++app-layer-dns-tcp.h \
++app-layer-dns-tcp-rust.h \
++app-layer-dns-udp.h \
++app-layer-dns-udp-rust.h \
++app-layer-enip-common.h \
++app-layer-enip.h \
++app-layer-events.h \
++app-layer-expectation.h \
++app-layer-ftp.h \
++app-layer.h \
++app-layer-htp-body.h \
++app-layer-htp-file.h \
++app-layer-htp.h \
++app-layer-htp-libhtp.h \
++app-layer-htp-mem.h \
++app-layer-htp-xff.h \
++app-layer-ikev2.h \
++app-layer-krb5.h \
++app-layer-modbus.h \
++app-layer-nbss.h \
++app-layer-nfs-tcp.h \
++app-layer-nfs-udp.h \
++app-layer-ntp.h \
++app-layer-parser.h \
++app-layer-protos.h \
++app-layer-register.h \
++app-layer-smb2.h \
++app-layer-smb.h \
++app-layer-smb-tcp-rust.h \
++app-layer-smtp.h \
++app-layer-ssh.h \
++app-layer-ssl.h \
++app-layer-template.h \
++app-layer-template-rust.h \
++app-layer-tftp.h \
++build-info.h \
++conf.h \
++conf-yaml-loader.h \
++counters.h \
++debug.h \
++decode-erspan.h \
++decode-ethernet.h \
++decode-events.h \
++decode-gre.h \
++decode.h \
++decode-icmpv4.h \
++decode-icmpv6.h \
++decode-ipv4.h \
++decode-ipv6.h \
++decode-mpls.h \
++decode-null.h \
++decode-ppp.h \
++decode-pppoe.h \
++decode-raw.h \
++decode-sctp.h \
++decode-sll.h \
++decode-tcp.h \
++decode-template.h \
++decode-teredo.h \
++decode-udp.h \
++decode-vlan.h \
++defrag-config.h \
++defrag.h \
++defrag-hash.h \
++defrag-queue.h \
++defrag-timeout.h \
++detect-ack.h \
++detect-app-layer-event.h \
++detect-app-layer-protocol.h \
++detect-asn1.h \
++detect-base64-data.h \
++detect-base64-decode.h \
++detect-bsize.h \
++detect-bypass.h \
++detect-byte-extract.h \
++detect-bytejump.h \
++detect-bytetest.h \
++detect-cipservice.h \
++detect-classtype.h \
++detect-content.h \
++detect-csum.h \
++detect-dce-iface.h \
++detect-dce-opnum.h \
++detect-dce-stub-data.h \
++detect-depth.h \
++detect-detection-filter.h \
++detect-distance.h \
++detect-dnp3.h \
++detect-dns-query.h \
++detect-dsize.h \
++detect-engine-address.h \
++detect-engine-address-ipv4.h \
++detect-engine-address-ipv6.h \
++detect-engine-alert.h \
++detect-engine-analyzer.h \
++detect-engine-build.h \
++detect-engine-content-inspection.h \
++detect-engine-dcepayload.h \
++detect-engine-dns.h \
++detect-engine-enip.h \
++detect-engine-event.h \
++detect-engine-filedata.h \
++detect-engine-file.h \
++detect-engine.h \
++detect-engine-hcbd.h \
++detect-engine-hcd.h \
++detect-engine-hhhd.h \
++detect-engine-hmd.h \
++detect-engine-hrhd.h \
++detect-engine-hrhhd.h \
++detect-engine-hrud.h \
++detect-engine-hsbd.h \
++detect-engine-hscd.h \
++detect-engine-hsmd.h \
++detect-engine-hua.h \
++detect-engine-iponly.h \
++detect-engine-loader.h \
++detect-engine-modbus.h \
++detect-engine-mpm.h \
++detect-engine-payload.h \
++detect-engine-port.h \
++detect-engine-prefilter-common.h \
++detect-engine-prefilter.h \
++detect-engine-profile.h \
++detect-engine-proto.h \
++detect-engine-register.h \
++detect-engine-siggroup.h \
++detect-engine-sigorder.h \
++detect-engine-state.h \
++detect-engine-tag.h \
++detect-engine-threshold.h \
++detect-engine-tls.h \
++detect-engine-uri.h \
++detect-fast-pattern.h \
++detect-file-data.h \
++detect-fileext.h \
++detect-file-hash-common.h \
++detect-filemagic.h \
++detect-filemd5.h \
++detect-filename.h \
++detect-filesha1.h \
++detect-filesha256.h \
++detect-filesize.h \
++detect-filestore.h \
++detect-flags.h \
++detect-flowbits.h \
++detect-flow.h \
++detect-flowint.h \
++detect-flowvar.h \
++detect-fragbits.h \
++detect-fragoffset.h \
++detect-ftpbounce.h \
++detect-ftpdata.h \
++detect-geoip.h \
++detect-gid.h \
++detect.h \
++detect-hostbits.h \
++detect-http-accept-enc.h \
++detect-http-accept.h \
++detect-http-accept-lang.h \
++detect-http-client-body.h \
++detect-http-connection.h \
++detect-http-content-len.h \
++detect-http-content-type.h \
++detect-http-cookie.h \
++detect-http-header-common.h \
++detect-http-header.h \
++detect-http-header-names.h \
++detect-http-headers.h \
++detect-http-headers-stub.h \
++detect-http-hh.h \
++detect-http-hrh.h \
++detect-http-method.h \
++detect-http-protocol.h \
++detect-http-raw-header.h \
++detect-http-raw-uri.h \
++detect-http-referer.h \
++detect-http-request-line.h \
++detect-http-response-line.h \
++detect-http-server-body.h \
++detect-http-start.h \
++detect-http-stat-code.h \
++detect-http-stat-msg.h \
++detect-http-ua.h \
++detect-http-uri.h \
++detect-icmp-id.h \
++detect-icmp-seq.h \
++detect-icode.h \
++detect-id.h \
++detect-ipopts.h \
++detect-ipproto.h \
++detect-iprep.h \
++detect-isdataat.h \
++detect-itype.h \
++detect-krb5-cname.h \
++detect-krb5-errcode.h \
++detect-krb5-msgtype.h \
++detect-krb5-sname.h \
++detect-l3proto.h \
++detect-lua-extensions.h \
++detect-lua.h \
++detect-mark.h \
++detect-metadata.h \
++detect-modbus.h \
++detect-msg.h \
++detect-nfs-procedure.h \
++detect-nfs-version.h \
++detect-noalert.h \
++detect-nocase.h \
++detect-offset.h \
++detect-parse.h \
++detect-pcre.h \
++detect-pkt-data.h \
++detect-pktvar.h \
++detect-prefilter.h \
++detect-priority.h \
++detect-rawbytes.h \
++detect-reference.h \
++detect-replace.h \
++detect-rev.h \
++detect-rpc.h \
++detect-sameip.h \
++detect-seq.h \
++detect-sid.h \
++detect-smb-share.h \
++detect-ssh-proto.h \
++detect-ssh-proto-version.h \
++detect-ssh-software.h \
++detect-ssh-software-version.h \
++detect-ssl-state.h \
++detect-ssl-version.h \
++detect-stream_size.h \
++detect-tag.h \
++detect-target.h \
++detect-template2.h \
++detect-template-buffer.h \
++detect-template.h \
++detect-template-rust-buffer.h \
++detect-threshold.h \
++detect-tls-cert-fingerprint.h \
++detect-tls-cert-issuer.h \
++detect-tls-cert-serial.h \
++detect-tls-cert-subject.h \
++detect-tls-cert-validity.h \
++detect-tls.h \
++detect-tls-ja3-hash.h \
++detect-tls-ja3-string.h \
++detect-tls-sni.h \
++detect-tls-version.h \
++detect-tos.h \
++detect-transform-compress-whitespace.h \
++detect-transform-sha256.h \
++detect-transform-strip-whitespace.h \
++detect-ttl.h \
++detect-uricontent.h \
++detect-urilen.h \
++detect-window.h \
++detect-within.h \
++detect-xbits.h \
++device-storage.h \
++flow-bit.h \
++flow-bypass.h \
++flow.h \
++flow-hash.h \
++flow-manager.h \
++flow-private.h \
++flow-queue.h \
++flow-storage.h \
++flow-timeout.h \
++flow-util.h \
++flow-var.h \
++flow-worker.h \
++host-bit.h \
++host.h \
++host-queue.h \
++host-storage.h \
++host-timeout.h \
++ippair-bit.h \
++ippair.h \
++ippair-queue.h \
++ippair-storage.h \
++ippair-timeout.h \
++log-cf-common.h \
++log-dnslog.h \
++log-droplog.h \
++log-file.h \
++log-filestore.h \
++log-httplog.h \
++log-pcap.h \
++log-stats.h \
++log-tcp-data.h \
++log-tlslog.h \
++log-tlsstore.h \
++output-filedata.h \
++output-file.h \
++output-filestore.h \
++output-flow.h \
++output.h \
++output-json-alert.h \
++output-json-dhcp.h \
++output-json-dnp3.h \
++output-json-dnp3-objects.h \
++output-json-dns.h \
++output-json-drop.h \
++output-json-email-common.h \
++output-json-file.h \
++output-json-flow.h \
++output-json.h \
++output-json-http.h \
++output-json-ikev2.h \
++output-json-krb5.h \
++output-json-metadata.h \
++output-json-netflow.h \
++output-json-nfs.h \
++output-json-smb.h \
++output-json-smtp.h \
++output-json-ssh.h \
++output-json-stats.h \
++output-json-template.h \
++output-json-template-rust.h \
++output-json-tftp.h \
++output-json-tls.h \
++output-lua.h \
++output-packet.h \
++output-stats.h \
++output-streaming.h \
++output-tx.h \
++packet-queue.h \
++pkt-var.h \
++queue.h \
++reputation.h \
++respond-reject.h \
++respond-reject-libnet11.h \
++runmode-af-packet.h \
++runmode-erf-dag.h \
++runmode-erf-file.h \
++runmode-ipfw.h \
++runmode-napatech.h \
++runmode-netmap.h \
++runmode-nflog.h \
++runmode-nfq.h \
++runmode-pcap-file.h \
++runmode-pcap.h \
++runmode-pfring.h \
++runmodes.h \
++runmode-tile.h \
++runmode-unittests.h \
++runmode-unix-socket.h \
++runmode-windivert.h \
++rust.h \
++source-af-packet.h \
++source-erf-dag.h \
++source-erf-file.h \
++source-ipfw.h \
++source-mpipe.h \
++source-napatech.h \
++source-netmap.h \
++source-nflog.h \
++source-nfq.h \
++source-nfq-prototypes.h \
++source-pcap-file-directory-helper.h \
++source-pcap-file.h \
++source-pcap-file-helper.h \
++source-pcap.h \
++source-pfring.h \
++source-windivert.h \
++source-windivert-prototypes.h \
++stream.h \
++stream-tcp.h \
++stream-tcp-inline.h \
++stream-tcp-list.h \
++stream-tcp-private.h \
++stream-tcp-reassemble.h \
++stream-tcp-sack.h \
++stream-tcp-util.h \
++suricata-common.h \
++suricata.h \
++threads-arch-tile.h \
++threads-debug.h \
++threads.h \
++threads-profile.h \
++threadvars.h \
++tm-modules.h \
++tmqh-flow.h \
++tmqh-nfq.h \
++tmqh-packetpool.h \
++tmqh-simple.h \
++tm-queuehandlers.h \
++tm-queues.h \
++tm-threads-common.h \
++tm-threads.h \
++tree.h \
++unix-manager.h \
++util-action.h \
++util-affinity.h \
++util-atomic.h \
++util-base64.h \
++util-binsearch.h \
++util-bloomfilter-counting.h \
++util-bloomfilter.h \
++util-buffer.h \
++util-byte.h \
++util-checksum.h \
++util-cidr.h \
++util-classification-config.h \
++util-clock.h \
++util-conf.h \
++util-coredump-config.h \
++util-cpu.h \
++util-crypt.h \
++util-daemon.h \
++util-debug-filters.h \
++util-debug.h \
++util-decode-asn1.h \
++util-decode-der-get.h \
++util-decode-der.h \
++util-decode-mime.h \
++util-detect.h \
++util-device.h \
++util-ebpf.h \
++util-enum.h \
++util-error.h \
++util-file-decompression.h \
++util-file.h \
++util-file-swf-decompression.h \
++util-fix_checksum.h \
++util-fmemopen.h \
++util-hash.h \
++util-hashlist.h \
++util-hash-lookup3.h \
++util-host-info.h \
++util-host-os-info.h \
++util-hyperscan.h \
++util-ioctl.h \
++util-ip.h \
++util-ja3.h \
++util-log-kafka.h \
++util-logopenfile.h \
++util-logopenfile-tile.h \
++util-log-redis.h \
++util-lua-common.h \
++util-lua-dnp3.h \
++util-lua-dnp3-objects.h \
++util-lua-dns.h \
++util-lua.h \
++util-lua-http.h \
++util-lua-ja3.h \
++util-luajit.h \
++util-lua-smtp.h \
++util-lua-ssh.h \
++util-lua-tls.h \
++util-magic.h \
++util-memcmp.h \
++util-memcpy.h \
++util-mem.h \
++util-memrchr.h \
++util-misc.h \
++util-mpm-ac-bs.h \
++util-mpm-ac.h \
++util-mpm-ac-tile.h \
++util-mpm.h \
++util-mpm-hs.h \
++util-napatech.h \
++util-optimize.h \
++util-pages.h \
++util-path.h \
++util-pidfile.h \
++util-pool.h \
++util-pool-thread.h \
++util-prefilter.h \
++util-print.h \
++util-privs.h \
++util-profiling.h \
++util-profiling-locks.h \
++util-proto-name.h \
++util-radix-tree.h \
++util-random.h \
++util-reference-config.h \
++util-rohash.h \
++util-rule-vars.h \
++util-runmodes.h \
++util-running-modes.h \
++util-signal.h \
++util-spm-bm.h \
++util-spm-bs2bm.h \
++util-spm-bs.h \
++util-spm.h \
++util-spm-hs.h \
++util-storage.h \
++util-streaming-buffer.h \
++util-syslog.h \
++util-threshold-config.h \
++util-time.h \
++util-unittest.h \
++util-unittest-helper.h \
++util-validate.h \
++util-var.h \
++util-var-name.h \
++util-vector.h \
++win32-misc.h \
++win32-service.h \
++win32-syscall.h \
++win32-syslog.h
++
++noinst_LTLIBRARIES = libsuri-c.la
++
++libsuri_c_la_SOURCES  = \
+ alert-debuglog.c alert-debuglog.h \
+ alert-fastlog.c alert-fastlog.h \
+ alert-prelude.c alert-prelude.h \
+@@ -388,7 +909,6 @@ stream-tcp-list.c stream-tcp-list.h \
+ stream-tcp-reassemble.c stream-tcp-reassemble.h \
+ stream-tcp-sack.c stream-tcp-sack.h \
+ stream-tcp-util.c stream-tcp-util.h \
+-suricata.c suricata.h \
+ threads.c threads.h threads-arch-tile.h \
+ threads-debug.h threads-profile.h \
+ tm-modules.c tm-modules.h \
+@@ -443,6 +963,7 @@ util-ja3.h util-ja3.c \
+ util-logopenfile.h util-logopenfile.c \
+ util-logopenfile-tile.h util-logopenfile-tile.c \
+ util-log-redis.h util-log-redis.c \
++util-log-kafka.h util-log-kafka.c \
+ util-lua.c util-lua.h \
+ util-luajit.c util-luajit.h \
+ util-lua-common.c util-lua-common.h \
+@@ -517,6 +1038,10 @@ win32-syslog.h
+ 
+ EXTRA_DIST = tests
+ 
++lib_LTLIBRARIES = libsuri.la
++libsuri_la_SOURCES =
++libsuri_la_LIBADD = libsuri-c.la
++
+ # set the include path found by configure
+ AM_CPPFLAGS = $(all_includes)
+ 
+diff --git a/src/decode.c b/src/decode.c
+index 8af438ad7..a583e644d 100644
+--- a/src/decode.c
++++ b/src/decode.c
+@@ -517,7 +517,9 @@ DecodeThreadVars *DecodeThreadVarsAlloc(ThreadVars *tv)
+         return NULL;
+     memset(dtv, 0, sizeof(DecodeThreadVars));
+ 
++    #if 0
+     dtv->app_tctx = AppLayerGetCtxThread(tv);
++    #endif
+ 
+     if (OutputFlowLogThreadInit(tv, NULL, &dtv->output_flow_thread_data) != TM_ECODE_OK) {
+         SCLogError(SC_ERR_THREAD_INIT, "initializing flow log API for thread failed");
+diff --git a/src/decode.h b/src/decode.h
+index a19166c4f..d7515b598 100644
+--- a/src/decode.h
++++ b/src/decode.h
+@@ -609,6 +609,9 @@ typedef struct Packet_
+ #ifdef HAVE_NAPATECH
+     NapatechPacketVars ntpv;
+ #endif
++#ifdef HAVE_QNSM
++    void * mbufPtr;
++#endif 
+ }
+ #ifdef HAVE_MPIPE
+     /* mPIPE requires packet buffers to be aligned to 128 byte boundaries. */
+diff --git a/src/output-json-alert.c b/src/output-json-alert.c
+index 697c9603a..11891b8dc 100644
+--- a/src/output-json-alert.c
++++ b/src/output-json-alert.c
+@@ -91,6 +91,8 @@
+ #define LOG_JSON_HTTP_BODY_BASE64  BIT_U16(7)
+ #define LOG_JSON_RULE_METADATA     BIT_U16(8)
+ #define LOG_JSON_RULE              BIT_U16(9)
++#define LOG_JSON_HTTP_BODY_HEX     BIT_U16(10)
++#define LOG_JSON_PAYLOAD_HEX       BIT_U16(11)
+ 
+ #define METADATA_DEFAULTS ( LOG_JSON_FLOW |                        \
+             LOG_JSON_APP_LAYER  |                                  \
+@@ -407,6 +409,18 @@ static void AlertAddPayload(AlertJsonOutputCtx *json_output_ctx, json_t *js, con
+         printable_buf[p->payload_len] = '\0';
+         json_object_set_new(js, "payload_printable", json_string((char *)printable_buf));
+     }
++    
++    if (json_output_ctx->flags & LOG_JSON_PAYLOAD_HEX)
++    {
++        unsigned long len = p->payload_len * 2 + 1;
++        uint8_t hex_buf[len];
++        uint32_t buf_offset = 0;
++        uint32_t offset = 0;
++        for (offset = 0; offset < p->payload_len; offset++) {
++            PrintBufferData((char *)hex_buf, &buf_offset, len, "%02X", p->payload[offset]);
++        }                        
++        json_object_set_new(js, "payload_hex", json_string((char *)hex_buf));
++    }
+ }
+ 
+ static int AlertJson(ThreadVars *tv, JsonAlertLogThread *aft, const Packet *p)
+@@ -454,6 +468,9 @@ static int AlertJson(ThreadVars *tv, JsonAlertLogThread *aft, const Packet *p)
+                     if (json_output_ctx->flags & LOG_JSON_HTTP_BODY_BASE64) {
+                         JsonHttpLogJSONBodyBase64(hjs, p->flow, pa->tx_id);
+                     }
++                    if (json_output_ctx->flags & LOG_JSON_HTTP_BODY_HEX) {
++                        JsonHttpLogJSONBodyHex(hjs, p->flow, pa->tx_id);
++                    }
+                     json_object_set_new(js, "http", hjs);
+                 }
+             }
+@@ -525,7 +542,7 @@ static int AlertJson(ThreadVars *tv, JsonAlertLogThread *aft, const Packet *p)
+         }
+ 
+         /* payload */
+-        if (json_output_ctx->flags & (LOG_JSON_PAYLOAD | LOG_JSON_PAYLOAD_BASE64)) {
++        if (json_output_ctx->flags & (LOG_JSON_PAYLOAD | LOG_JSON_PAYLOAD_BASE64 | LOG_JSON_PAYLOAD_HEX)) {
+             int stream = (p->proto == IPPROTO_TCP) ?
+                          (pa->flags & (PACKET_ALERT_FLAG_STATE_MATCH | PACKET_ALERT_FLAG_STREAM_MATCH) ?
+                          1 : 0) : 0;
+@@ -562,6 +579,17 @@ static int AlertJson(ThreadVars *tv, JsonAlertLogThread *aft, const Packet *p)
+                         json_object_set_new(js, "payload_printable",
+                                 json_string((char *)printable_buf));
+                     }
++                    
++                    if (json_output_ctx->flags & LOG_JSON_PAYLOAD_HEX) {
++                        unsigned long len = payload->offset * 2 + 1;
++                        uint8_t hex_buf[len];
++                        uint32_t buf_offset = 0;
++                        uint32_t offset = 0;
++                        for (offset = 0; offset < payload->offset; offset++) {
++                            PrintBufferData((char *)hex_buf, &buf_offset, len, "%02X", payload->buffer[offset]);
++                        }                        
++                        json_object_set_new(js, "payload_hex", json_string((char *)hex_buf));
++                    }
+                 } else if (p->payload_len) {
+                     /* Fallback on packet payload */
+                     AlertAddPayload(json_output_ctx, js, p);
+@@ -857,7 +885,9 @@ static void JsonAlertLogSetupMetadata(AlertJsonOutputCtx *json_output_ctx,
+         SetFlag(conf, "payload-printable", LOG_JSON_PAYLOAD, &flags);
+         SetFlag(conf, "http-body-printable", LOG_JSON_HTTP_BODY, &flags);
+         SetFlag(conf, "http-body", LOG_JSON_HTTP_BODY_BASE64, &flags);
+-
++        SetFlag(conf, "http-body-hex", LOG_JSON_HTTP_BODY_HEX, &flags);
++        SetFlag(conf, "payload-hex", LOG_JSON_PAYLOAD_HEX, &flags);
++        
+         /* Check for obsolete configuration flags to enable specific
+          * protocols. These are now just aliases for enabling
+          * app-layer logging. */
+diff --git a/src/output-json-http.c b/src/output-json-http.c
+index b4898ab65..c361790d4 100644
+--- a/src/output-json-http.c
++++ b/src/output-json-http.c
+@@ -441,6 +441,43 @@ void JsonHttpLogJSONBodyBase64(json_t *js, Flow *f, uint64_t tx_id)
+     }
+ }
+ 
++static void BodyHexBuffer(json_t *js, HtpBody *body, const char *key)
++{
++    if (body->sb != NULL && body->sb->buf != NULL) {
++        const uint8_t *body_data;
++        uint32_t body_data_len;
++        uint64_t body_offset;
++
++        if (StreamingBufferGetData(body->sb, &body_data,
++                                   &body_data_len, &body_offset) == 0) {
++            return;
++        }
++
++        unsigned long len = body_data_len * 2 + 1;
++        uint8_t encoded[len];
++        uint32_t offset = 0;
++        for (body_offset = 0; body_offset < body_data_len; body_offset++) {
++            PrintBufferData((char *)encoded, &offset, len, "%02X", body_data[body_offset]);
++        }        
++        json_object_set_new(js, key, json_string((char *)encoded));
++    }
++}
++
++void JsonHttpLogJSONBodyHex(json_t *js, Flow *f, uint64_t tx_id)
++{
++    HtpState *htp_state = (HtpState *)FlowGetAppState(f);
++    if (htp_state) {
++        htp_tx_t *tx = AppLayerParserGetTx(IPPROTO_TCP, ALPROTO_HTTP, htp_state, tx_id);
++        if (tx) {
++            HtpTxUserData *htud = (HtpTxUserData *)htp_tx_get_user_data(tx);
++            if (htud != NULL) {
++                BodyHexBuffer(js, &htud->request_body, "http_request_body_hex");
++                BodyHexBuffer(js, &htud->response_body, "http_response_body_hex");
++            }
++        }
++    }
++}
++
+ /* JSON format logging */
+ static void JsonHttpLogJSON(JsonHttpLogThread *aft, json_t *js, htp_tx_t *tx, uint64_t tx_id)
+ {
+diff --git a/src/output-json-http.h b/src/output-json-http.h
+index a37fe92fe..e8f0b5c40 100644
+--- a/src/output-json-http.h
++++ b/src/output-json-http.h
+@@ -30,6 +30,7 @@ void JsonHttpLogRegister(void);
+ json_t *JsonHttpAddMetadata(const Flow *f, uint64_t tx_id);
+ void JsonHttpLogJSONBodyPrintable(json_t *js, Flow *f, uint64_t tx_id);
+ void JsonHttpLogJSONBodyBase64(json_t *js, Flow *f, uint64_t tx_id);
++void JsonHttpLogJSONBodyHex(json_t *js, Flow *f, uint64_t tx_id);
+ #endif /* HAVE_LIBJANSSON */
+ 
+ #endif /* __OUTPUT_JSON_HTTP_H__ */
+diff --git a/src/output-json.c b/src/output-json.c
+index ab488b9c7..5845f2f6c 100644
+--- a/src/output-json.c
++++ b/src/output-json.c
+@@ -57,6 +57,7 @@
+ #include "util-buffer.h"
+ #include "util-logopenfile.h"
+ #include "util-log-redis.h"
++#include "util-log-kafka.h"
+ #include "util-device.h"
+ #include "util-validate.h"
+ #include "util-crypt.h"
+@@ -902,6 +903,14 @@ OutputInitResult OutputJsonInitCtx(ConfNode *conf)
+                            "redis JSON output option is not compiled");
+                 exit(EXIT_FAILURE);
+ #endif
++            } else if (strcmp(output_s, "kafka") == 0) {
++#ifdef HAVE_LIBRDKAFKA
++                json_ctx->json_out = LOGFILE_TYPE_KAFKA;
++#else
++                SCLogError(SC_ERR_INVALID_ARGUMENT,
++                           "kafka JSON output option is not compiled");
++                exit(EXIT_FAILURE);
++#endif
+             } else {
+                 SCLogError(SC_ERR_INVALID_ARGUMENT,
+                            "Invalid JSON output option: %s", output_s);
+@@ -988,7 +997,29 @@ OutputInitResult OutputJsonInitCtx(ConfNode *conf)
+             }
+         }
+ #endif
++#ifdef HAVE_LIBRDKAFKA
++        else if (json_ctx->json_out == LOGFILE_TYPE_KAFKA) {
++            ConfNode *kafka_node = ConfNodeLookupChild(conf, "kafka");
++            if (!json_ctx->file_ctx->sensor_name) {
++                char hostname[1024];
++                gethostname(hostname, 1023);
++                json_ctx->file_ctx->sensor_name = SCStrdup(hostname);
++            }
++            if (json_ctx->file_ctx->sensor_name  == NULL) {
++                LogFileFreeCtx(json_ctx->file_ctx);
++                SCFree(json_ctx);
++                SCFree(output_ctx);
++                return result;
++            }
+ 
++            if (SCConfLogOpenKafka(kafka_node, json_ctx->file_ctx) < 0) {
++                LogFileFreeCtx(json_ctx->file_ctx);
++                SCFree(json_ctx);
++                SCFree(output_ctx);
++                return result;
++            }
++        }
++#endif
+         const char *sensor_id_s = ConfNodeLookupChildValue(conf, "sensor-id");
+         if (sensor_id_s != NULL) {
+             if (ByteExtractStringUint64((uint64_t *)&sensor_id, 10, 0, sensor_id_s) == -1) {
+diff --git a/src/runmodes.c b/src/runmodes.c
+index acb1b6c7d..35425e1f8 100644
+--- a/src/runmodes.c
++++ b/src/runmodes.c
+@@ -111,6 +111,8 @@ static TAILQ_HEAD(, OutputFreeList_) output_free_list =
+ static const char *RunModeTranslateModeToName(int runmode)
+ {
+     switch (runmode) {
++        case RUNMODE_DPDK:
++            return "DPDK";
+         case RUNMODE_PCAP_DEV:
+             return "PCAP_DEV";
+         case RUNMODE_PCAP_FILE:
+diff --git a/src/runmodes.h b/src/runmodes.h
+index 3087ff9a0..43b371276 100644
+--- a/src/runmodes.h
++++ b/src/runmodes.h
+@@ -26,6 +26,7 @@
+ /* Run mode */
+ enum RunModes {
+     RUNMODE_UNKNOWN = 0,
++    RUNMODE_DPDK,
+     RUNMODE_PCAP_DEV,
+     RUNMODE_PCAP_FILE,
+     RUNMODE_PFRING,
+diff --git a/src/tm-modules.c b/src/tm-modules.c
+index 310e96924..6c8ff5f1c 100644
+--- a/src/tm-modules.c
++++ b/src/tm-modules.c
+@@ -237,7 +237,8 @@ const char * TmModuleTmmIdToString(TmmId id)
+         CASE_CODE (TMM_RECEIVEWINDIVERT);
+         CASE_CODE (TMM_VERDICTWINDIVERT);
+         CASE_CODE (TMM_DECODEWINDIVERT);
+-
++        CASE_CODE (TMM_RECEIVEDPDK);
++        CASE_CODE (TMM_DECODEDPDK);
+         CASE_CODE (TMM_SIZE);
+     }
+     return "<unknown>";
+diff --git a/src/tm-threads-common.h b/src/tm-threads-common.h
+index 33a95f921..194f781a2 100644
+--- a/src/tm-threads-common.h
++++ b/src/tm-threads-common.h
+@@ -39,6 +39,8 @@ typedef enum {
+     TMM_RECEIVEPCAPFILE,
+     TMM_DECODEPCAP,
+     TMM_DECODEPCAPFILE,
++    TMM_RECEIVEDPDK,
++    TMM_DECODEDPDK,
+     TMM_RECEIVEPFRING,
+     TMM_DECODEPFRING,
+     TMM_RESPONDREJECT,
+diff --git a/src/util-error.c b/src/util-error.c
+index ecdfe57d3..3208c3e36 100644
+--- a/src/util-error.c
++++ b/src/util-error.c
+@@ -336,6 +336,7 @@ const char * SCErrorToString(SCError err)
+         CASE_CODE (SC_WARN_DUPLICATE_OUTPUT);
+         CASE_CODE (SC_ERR_NO_MAGIC_SUPPORT);
+         CASE_CODE (SC_ERR_REDIS);
++        CASE_CODE (SC_ERR_KAFKA);
+         CASE_CODE (SC_ERR_VAR_LIMIT);
+         CASE_CODE (SC_WARN_CHMOD);
+         CASE_CODE (SC_WARN_LOG_CF_TOO_MANY_NODES);
+diff --git a/src/util-error.h b/src/util-error.h
+index cfa74b021..b56beaa20 100644
+--- a/src/util-error.h
++++ b/src/util-error.h
+@@ -325,6 +325,7 @@ typedef enum {
+     SC_WARN_REMOVE_FILE,
+     SC_ERR_NO_MAGIC_SUPPORT,
+     SC_ERR_REDIS,
++    SC_ERR_KAFKA,
+     SC_ERR_VAR_LIMIT,
+     SC_WARN_DUPLICATE_OUTPUT,
+     SC_WARN_CHMOD,
+diff --git a/src/util-log-kafka.c b/src/util-log-kafka.c
+new file mode 100644
+index 000000000..4864ad178
+--- /dev/null
++++ b/src/util-log-kafka.c
+@@ -0,0 +1,188 @@
++/* Copyright (C) 2007-2019 Open Information Security Foundation
++ *
++ * You can copy, redistribute or modify this Program under the terms of
++ * the GNU General Public License version 2 as published by the Free
++ * Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * version 2 along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
++ * 02110-1301, USA.
++ */
++
++/**
++ * \file
++ * File-like output for logging:  kafka
++ */
++#include "suricata-common.h"
++#include "util-log-kafka.h"
++#include "util-logopenfile.h"
++
++#ifdef HAVE_LIBRDKAFKA
++
++static void SCLogFileCloseKafka(LogFileCtx *log_ctx)
++{    
++    SCLogKafkaContext *kafka_ctx = log_ctx->kafka;
++
++    if (NULL == kafka_ctx) {
++        return;
++    }
++
++    if (kafka_ctx->rk) {
++    	/* Poll to handle delivery reports */
++    	rd_kafka_poll(kafka_ctx->rk, 0);
++
++    	/* Wait for messages to be delivered */
++    	while (rd_kafka_outq_len(kafka_ctx->rk) > 0)
++    		rd_kafka_poll(kafka_ctx->rk, 100);
++    }
++    
++    if (kafka_ctx->rkt) {
++    	/* Destroy topic */
++    	rd_kafka_topic_destroy(kafka_ctx->rkt);
++    }
++
++    if (kafka_ctx->rk) {
++    	/* Destroy the handle */
++    	rd_kafka_destroy(kafka_ctx->rk);
++    }
++    return;
++}
++
++int LogFileWriteKafka(void *lf_ctx, const char *string, size_t string_len)
++{    
++    LogFileCtx *log_ctx = lf_ctx;    
++    SCLogKafkaContext *kafka_ctx = log_ctx->kafka;
++    int partition = kafka_ctx->partition % (log_ctx->kafka_setup.partitions);
++    
++    if (rd_kafka_produce(kafka_ctx->rkt, partition,
++			RD_KAFKA_MSG_F_COPY,
++			/* Payload and length */
++			(void *)string, string_len,
++			/* Optional key and its length */
++			NULL, 0,
++			/* Message opaque, provided in
++			 * delivery report callback as
++			 * msg_opaque. */
++			NULL) == -1) 
++	{
++		SCLogError(SC_ERR_KAFKA,
++				"%% Failed to produce to topic %s "
++				"partition %i: %s\n",
++				log_ctx->kafka_setup.topic_name, partition,
++				rd_kafka_err2str(
++					rd_kafka_last_error()));
++		/* Poll to handle delivery reports */
++		rd_kafka_poll(kafka_ctx->rk, 0);
++	}
++    kafka_ctx->partition++;
++    
++    return -1;
++}
++
++static void msg_delivered (rd_kafka_t *rk,
++			   void *payload, size_t len,
++			   int error_code,
++			   void *opaque, void *msg_opaque) 
++{
++    rk = rk;
++    payload = payload;
++    len = len;
++    opaque = opaque;
++    msg_opaque = msg_opaque;
++	if (error_code)
++		SCLogError(SC_ERR_KAFKA, "%% Message delivery failed: %s\n",
++			rd_kafka_err2str(error_code));
++}
++
++/** \brief configure and initializes kafka output logging
++ *  \param kafka_node ConfNode structure for the output section in question
++ *  \param lf_ctx Log file context allocated by caller
++ *  \retval 0 on success
++ */
++int SCConfLogOpenKafka(ConfNode *kafka_node, void *lf_ctx)
++{
++    LogFileCtx *log_ctx = lf_ctx;
++    const char *partitions = NULL;
++    SCLogKafkaContext *kafka_ctx = NULL;
++
++    if (NULL == kafka_node) {
++        return -1;
++    }
++    
++    log_ctx->kafka_setup.brokers = ConfNodeLookupChildValue(kafka_node, "brokers");
++    log_ctx->kafka_setup.topic_name = ConfNodeLookupChildValue(kafka_node, "topic");
++    partitions =  ConfNodeLookupChildValue(kafka_node, "partitions");
++    log_ctx->kafka_setup.partitions = atoi(partitions);
++
++    /*create kafka ctx*/        
++    rd_kafka_conf_t *conf;
++    rd_kafka_topic_conf_t *topic_conf;        
++    char tmp[16];        
++    char errstr[512];
++    kafka_ctx = (SCLogKafkaContext*) SCCalloc(1, sizeof(SCLogKafkaContext));
++    if (kafka_ctx == NULL) {
++        SCLogError(SC_ERR_MEM_ALLOC, "Unable to allocate kafka context");
++        exit(EXIT_FAILURE);
++    }
++    
++    conf = rd_kafka_conf_new();
++    snprintf(tmp, sizeof(tmp), "%i", SIGIO);        
++    if (RD_KAFKA_CONF_OK != rd_kafka_conf_set(conf, 
++        "internal.termination.signal", 
++        tmp, 
++        errstr, 
++        sizeof(errstr))) {
++        SCLogError(SC_ERR_KAFKA, "Unable to allocate kafka context");
++    }
++    if (RD_KAFKA_CONF_OK != rd_kafka_conf_set(conf, 
++        "broker.version.fallback", 
++        "0.8.2", 
++        errstr, 
++        sizeof(errstr))) {
++        SCLogError(SC_ERR_KAFKA, "%s", errstr);
++    }
++    if (RD_KAFKA_CONF_OK != rd_kafka_conf_set(conf, 
++        "queue.buffering.max.messages", 
++        "500000",
++        errstr, 
++        sizeof(errstr))) {
++        SCLogError(SC_ERR_KAFKA, "%s", errstr);
++    }
++    
++    rd_kafka_conf_set_dr_cb(conf, msg_delivered);
++    if (!(kafka_ctx->rk = rd_kafka_new(RD_KAFKA_PRODUCER, 
++        conf, 
++        errstr, 
++        sizeof(errstr)))) {
++        SCLogError(SC_ERR_KAFKA, "%% Failed to create new producer: %s", errstr);
++        exit(EXIT_FAILURE);
++    }
++    if (0 == rd_kafka_brokers_add(kafka_ctx->rk, 
++        log_ctx->kafka_setup.brokers)) {
++        SCLogError(SC_ERR_KAFKA, "%% No valid brokers specified");
++        exit(EXIT_FAILURE);
++    }        
++	topic_conf = rd_kafka_topic_conf_new();
++    kafka_ctx->rkt = rd_kafka_topic_new(kafka_ctx->rk, 
++        log_ctx->kafka_setup.topic_name, 
++        topic_conf);
++    if (NULL == kafka_ctx->rkt) {
++        SCLogError(SC_ERR_KAFKA, "%% Failed to create kafka topic %s", 
++            log_ctx->kafka_setup.topic_name);
++        exit(EXIT_FAILURE);
++    }
++
++    kafka_ctx->partition = 0;
++    log_ctx->kafka = kafka_ctx;
++    log_ctx->Close = SCLogFileCloseKafka;
++    
++    return 0;
++}
++
++#endif
+diff --git a/src/util-log-kafka.h b/src/util-log-kafka.h
+new file mode 100644
+index 000000000..e0f47e638
+--- /dev/null
++++ b/src/util-log-kafka.h
+@@ -0,0 +1,42 @@
++/* Copyright (C) 2019 Open Information Security Foundation
++ *
++ * You can copy, redistribute or modify this Program under the terms of
++ * the GNU General Public License version 2 as published by the Free
++ * Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * version 2 along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
++ * 02110-1301, USA.
++ */
++
++#ifndef __UTIL_LOG_KAFKA_H__
++#define __UTIL_LOG_KAFKA_H__
++
++#ifdef HAVE_LIBRDKAFKA
++#include <librdkafka/rdkafka.h>
++
++
++typedef struct  {
++    const char *brokers;
++    const char *topic_name;
++    int partitions;
++}KafkaSetup;
++
++typedef struct {
++    rd_kafka_t *rk;
++    rd_kafka_topic_t *rkt;
++    long partition;
++}SCLogKafkaContext;
++
++int LogFileWriteKafka(void *lf_ctx, const char *string, size_t string_len);
++int SCConfLogOpenKafka(ConfNode *kafka_node, void *lf_ctx);
++
++#endif
++
++#endif
+diff --git a/src/util-logopenfile.c b/src/util-logopenfile.c
+index a322399e3..a9b971b5f 100644
+--- a/src/util-logopenfile.c
++++ b/src/util-logopenfile.c
+@@ -331,6 +331,7 @@ SCConfLogOpenGeneric(ConfNode *conf,
+     char log_path[PATH_MAX];
+     const char *log_dir;
+     const char *filename, *filetype;
++    const char *sensor_name = NULL;
+ 
+     // Arg check
+     if (conf == NULL || log_ctx == NULL || default_filename == NULL) {
+@@ -348,6 +349,12 @@ SCConfLogOpenGeneric(ConfNode *conf,
+     }
+ 
+     // Resolve the given config
++    (void)ConfGet("sensor-name", &sensor_name);
++    if ((NULL == log_ctx->sensor_name) && sensor_name)
++    {
++        log_ctx->sensor_name = SCStrdup(sensor_name);
++    }
++    
+     filename = ConfNodeLookupChildValue(conf, "filename");
+     if (filename == NULL)
+         filename = default_filename;
+@@ -476,6 +483,20 @@ SCConfLogOpenGeneric(ConfNode *conf,
+         }
+         log_ctx->type = LOGFILE_TYPE_REDIS;
+ #endif
++#ifdef HAVE_LIBRDKAFKA
++    } else if (strcmp(filetype, "kafka") == 0) {
++        ConfNode *kafka_node = ConfNodeLookupChild(conf, "kafka");
++        if (!log_ctx->sensor_name) {
++            char hostname[1024];
++            gethostname(hostname, 1023);
++            log_ctx->sensor_name = SCStrdup(hostname);
++        }
++        if (SCConfLogOpenKafka(kafka_node, log_ctx) < 0) {
++            SCLogError(SC_ERR_KAFKA, "failed to open kafka output");
++            return -1;
++        }
++        log_ctx->type = LOGFILE_TYPE_KAFKA;
++#endif
+     } else {
+         SCLogError(SC_ERR_INVALID_YAML_CONF_ENTRY, "Invalid entry for "
+                    "%s.filetype.  Expected \"regular\" (default), \"unix_stream\", "
+@@ -615,6 +636,11 @@ int LogFileWrite(LogFileCtx *file_ctx, MemBuffer *buffer)
+         SCMutexUnlock(&file_ctx->fp_mutex);
+     }
+ #endif
+-
++#ifdef HAVE_LIBRDKAFKA
++    else if (file_ctx->type == LOGFILE_TYPE_KAFKA) {
++        LogFileWriteKafka(file_ctx, (const char *)MEMBUFFER_BUFFER(buffer),
++            MEMBUFFER_OFFSET(buffer));
++    }
++#endif
+     return 0;
+ }
+diff --git a/src/util-logopenfile.h b/src/util-logopenfile.h
+index 26f6d8c9c..7d5224851 100644
+--- a/src/util-logopenfile.h
++++ b/src/util-logopenfile.h
+@@ -31,7 +31,9 @@
+ #ifdef HAVE_LIBHIREDIS
+ #include "util-log-redis.h"
+ #endif /* HAVE_LIBHIREDIS */
+-
++#ifdef HAVE_LIBRDKAFKA
++#include "util-log-kafka.h"
++#endif
+ 
+ typedef struct {
+     uint16_t fileno;
+@@ -41,7 +43,8 @@ enum LogFileType { LOGFILE_TYPE_FILE,
+                    LOGFILE_TYPE_SYSLOG,
+                    LOGFILE_TYPE_UNIX_DGRAM,
+                    LOGFILE_TYPE_UNIX_STREAM,
+-                   LOGFILE_TYPE_REDIS };
++                   LOGFILE_TYPE_REDIS,
++                   LOGFILE_TYPE_KAFKA};
+ 
+ typedef struct SyslogSetup_ {
+     int alert_syslog_level;
+@@ -56,6 +59,9 @@ typedef struct LogFileCtx_ {
+ #ifdef HAVE_LIBHIREDIS
+         void *redis;
+ #endif
++#ifdef HAVE_LIBRDKAFKA
++        void *kafka;
++#endif
+     };
+ 
+     union {
+@@ -63,6 +69,9 @@ typedef struct LogFileCtx_ {
+ #ifdef HAVE_LIBHIREDIS
+         RedisSetup redis_setup;
+ #endif
++#ifdef HAVE_LIBRDKAFKA
++        KafkaSetup kafka_setup;
++#endif
+     };
+ 
+     int (*Write)(const char *buffer, int buffer_len, struct LogFileCtx_ *fp);
+-- 
+2.13.0.windows.1
+

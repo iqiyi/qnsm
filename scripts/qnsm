@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+# qnsm Starts qnsm
+#
+#
+# chkconfig: 2345 12 88
+# description: QNSM is an open source NSM
+### BEGIN INIT INFO
+# Provides: 
+### END INIT INFO
+
+# Source function library.
+. /etc/init.d/functions
+
+[ -f /var/qnsm/qnsm-inspect ] || exit 0
+
+RETVAL=0
+
+umask 077
+
+start(){
+      echo "Starting serive ..."
+      python /var/qnsm/setup_dpdk_env.py ./dpdk_env.cfg
+      echo "Start Service "
+}
+
+stop(){
+      echo "Stopping Service "
+      ps aux | grep qnsm-inspect | grep -v grep | awk '{print $2}' | xargs kill
+      echo "Stopped Service "
+}
+
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  *)
+        exit 1
+esac
