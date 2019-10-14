@@ -301,6 +301,6 @@ $ tail -n 20 dump_oss.log
 
 另外，在每次不向前兼容的更新前（比如更新 DPDK 版本），我们会新建一个 LTS 分支，并维护约一年时间。
 
-QNSM 开发合作采用 Git workflow 的工作方式，具体可以参考Contributing文档，我们欢迎更多的开发者的参与和贡献。
+QNSM 开发合作采用 Git workflow 的工作方式，具体可以参考[Contributing](CONTRIBUTING.md)文档，我们欢迎更多的开发者的参与和贡献。
 
 * 邮件组: qnsm_devel#qiyi.com (请用@替换#).
