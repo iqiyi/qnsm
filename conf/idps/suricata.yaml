@@ -142,11 +142,8 @@ outputs:
       filetype: kafka
       kafka:
         brokers: > 
-         bordermgmt-kafka-online003-bjdxt9.qiyi.virtual:9092,
-         bordermgmt-kafka-online004-bjdxt9.qiyi.virtual:9092,
-         bordermgmt-kafka-online005-bjdxt9.qiyi.virtual:9092,
-         bordermgmt-kafka-online006-bjdxt9.qiyi.virtual:9092,
-         bordermgmt-kafka-online007-bjdxt9.qiyi.virtual:9092
+         xxxx:port1,
+         yyyy:port1
         topic: nsm_event
         partitions: 5
       payload-hex: yes
