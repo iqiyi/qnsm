@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='ASCII'?>
+<CONFIG>
+    <borderm>
+        <redis>
+        </redis>
+    </borderm>
+    <group>
+        <name>net-segs</name>
+        <hosts>
+            <!--
+            <ip>A.B.C.D/24</ip>
+			<ipv6>A:B:C:D::/64</ipv6>
+            -->
+        </hosts>
+    </group>
+    <group>
+        <name>disable_ip</name>
+        <hosts>
+            <ip>10.0.0.0/8</ip>
+        </hosts>
+    </group>
+    <services>
+        <port>22</port>
+        <port>23</port>
+        <port>53</port>
+        <port>80</port>
+        <port>123</port> <!-- ntp -->
+        <port>135</port> <!-- rpc -->
+        <port>137</port> <!-- netbios -->
+        <port>139</port> <!-- netbios -->
+        <port>443</port>
+        <port>3389</port> <!--windows rdp-->
+    </services>
+</CONFIG>
+
