@@ -79,7 +79,7 @@ DDOS检测单核性能为`1.8mpps`。
 
 ## IDPS性能
 
-![mix_idps_perf.PNG.PNG](./resources/pic/mix_idps_perf.PNG)
+![mix_idps_perf.PNG.PNG](../resources/pic/mix_idps_perf.PNG)
 
 单核处理能力为`635Kpps`。因此，相比于IDPS独立部署，性能没有损失。
 
