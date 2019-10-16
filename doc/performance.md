@@ -56,7 +56,7 @@ IDPS性能跟跟很多因素有关，包括包大小，连接数，流量类型�
 * 加载2800+规则
 * IDPS检测占用逻辑核数目：10，管理占用逻辑核数目：3
 
-![only_idps_perf.PNG](./resources/pic/only_idps_perf.PNG)
+![only_idps_perf.PNG](../resources/pic/only_idps_perf.PNG)
 
 IDPS检测单核性能为`640Kpps`。
 
@@ -79,7 +79,7 @@ DDOS检测单核性能为`1.8mpps`。
 
 ## IDPS性能
 
-![mix_idps_perf.PNG.PNG](./resources/pic/mix_idps_perf.PNG)
+![mix_idps_perf.PNG.PNG](../resources/pic/mix_idps_perf.PNG)
 
 单核处理能力为`635Kpps`。因此，相比于IDPS独立部署，性能没有损失。
 

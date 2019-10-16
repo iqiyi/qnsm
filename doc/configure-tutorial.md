@@ -114,7 +114,7 @@ Core 13 [11, 35]        [23, 47]
 
 整体流水线框图如下：
 
-![pipeline](./resources/pic/pipeline.png)
+![pipeline](../resources/pic/pipeline.png)
 
 * SIP_AGG，DUMP， EDGE，MASTER，在Node 0各分配一个逻辑核
 * SESSM，VIP_AGG各分配Node 0的8个逻辑核
