@@ -5,9 +5,10 @@
     你的代码现在位于 https://github.com/xxx/qnsm (xxx改为你的github账号)
 
 ## 本地clone代码
-
-git clone https://github.com/CosmosSun/qnsm.git
+```bash
+git clone https://github.com/xxx/qnsm.git
 cd qnsm
+```
 
 ## 创建名字为 upstream 的上游地址
 ```bash
