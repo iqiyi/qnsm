@@ -78,7 +78,7 @@
 	<log>
 		<syslog>
 			<facility>local5</facility>
-			<log-level>info</log-level>
+			<log-level>Critical</log-level>
 		</syslog>
 	</log>
 </CONFIG>

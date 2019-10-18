@@ -256,7 +256,14 @@ QNSM: 1557921514 master cmd msg {"id":0,"op":"ip_dump_pkt_enable","content":[{"i
 ```bash
 $ ls dump
 xx.xx.xx.xx-core5-20191018-1522.pcap
-$ 
+```
+dump目录配置如下，可以参考[`配置手册`](./doc/configure-tutorial.md)。
+```
+$ cat /var/qnsm/qnsm_edge.xml 
+<CONFIG>
+...
+    <dump-dir>/data/qnsm</dump-dir>
+</CONFIG>
 ```
 
 ### IDPS事件
