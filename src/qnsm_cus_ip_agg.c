@@ -237,7 +237,7 @@ static void qnsm_cus_ip_aging(struct rte_timer *timer, void *arg)
                            addr.in4_addr.s_addr,
                            ret);
                 if (ret) {
-                    RTE_LOG(CRIT, QNSM, "del sip 0x%x failed\n", addr.in4_addr.s_addr);
+                    QNSM_LOG(ERR, "del sip 0x%x failed\n", addr.in4_addr.s_addr);
                 }
             } else {
                 //TODO
@@ -630,14 +630,14 @@ static int32_t qnsm_cus_cmd_msg_proc(void *data, uint32_t data_len)
     if (QNSM_BIZ_VIP_ADD == vip_msg->op) {
         if (EN_QNSM_CMD_VIP_ENABLE_CUS_IP_AGG == vip_msg->cmd) {
             app_data->vip_enable_cus_agg_num++;
-            RTE_LOG(CRIT, QNSM, "cus ip (vip_enable_cus_agg_num:%u)\n", app_data->vip_enable_cus_agg_num);
+            QNSM_LOG(CRIT, "cus ip (vip_enable_cus_agg_num:%u)\n", app_data->vip_enable_cus_agg_num);
         }
 
         if (EN_QNSM_CMD_VIP_DISABLE_CUS_IP_AGG == vip_msg->cmd) {
             if (0 < app_data->vip_enable_cus_agg_num) {
                 app_data->vip_enable_cus_agg_num--;
             }
-            RTE_LOG(CRIT, QNSM, "cus ip (vip_enable_cus_agg_num:%u)\n", app_data->vip_enable_cus_agg_num);
+            QNSM_LOG(CRIT, "cus ip (vip_enable_cus_agg_num:%u)\n", app_data->vip_enable_cus_agg_num);
         }
     }
 
@@ -654,7 +654,7 @@ static void qnsm_cus_run(void *para)
         cus_ip_num = qnsm_get_tbl_item_no(EN_QNSM_IPV4_CUSTOM) + qnsm_get_tbl_item_no(EN_QNSM_IPV6_CUSTOM);
         if (0 >= cus_ip_num) {
             custom_data->vip_enable_cus_agg_num = 0;
-            RTE_LOG(CRIT, QNSM, "cus ip run, set vip_enable_cus_agg_num zero\n");
+            QNSM_LOG(CRIT, "cus ip run, set vip_enable_cus_agg_num zero\n");
         } else if (10 >= cus_ip_num) {
             sleep_time = sleep_time >> 1;
         } else {
@@ -666,7 +666,7 @@ static void qnsm_cus_run(void *para)
 
 EXIT:
     if (sleep_time != custom_data->prev_sleep_time) {
-        RTE_LOG(CRIT, QNSM, "cus ip run, %" PRIu64 "sleep time prev %u now %u\n",
+        QNSM_LOG(CRIT, "cus ip run, %" PRIu64 "sleep time prev %u now %u\n",
                 jiffies(), custom_data->prev_sleep_time, sleep_time);
         custom_data->prev_sleep_time = sleep_time;
     }

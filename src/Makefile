@@ -29,7 +29,7 @@ SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 include $(ROOTDIR)/dpdk.mk
 include $(ROOTDIR)/config.mk
 
-INCDIRS += -I $(SRCDIR)/../include -I $(SRCDIR)/../include/cfg
+INCDIRS += -I $(SRCDIR)/../include -I $(SRCDIR)/../include/cfg -I /usr/include/libxml2/
 
 # for qnsm main program.
 CFLAGS += -D __DDOS -D __MIRR_MODE_BOTH 

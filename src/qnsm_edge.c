@@ -206,7 +206,7 @@ int32_t qnsm_cus_ip_agg_msg_proc(void *data, uint32_t data_len)
         (void)inet_ntop(AF_INET6, &agg_msg->key.in6_addr, tmp, sizeof(tmp));
     }
 
-    RTE_LOG(CRIT, QNSM, "[ EDGE ] rcv sip %s\n", tmp);
+    QNSM_LOG(INFO, "[ EDGE ] rcv sip %s\n", tmp);
     cJSON_AddStringToObject(root,"ip", tmp);
     cJSON_AddStringToObject(root, "dc", qnsm_get_edge_conf()->dc_name);
     cJSON_AddStringToObject(root, "metric", "sip_in");

@@ -252,7 +252,7 @@ static inline int32_t qnsm_port_statis_tbl_init(enum qnsm_port_type type, uint32
     if (NULL == svr_tbl->port_statis_tbl[type]) {
         QNSM_ASSERT(0);
     }
-    RTE_LOG(CRIT, QNSM, "[ INFO ] tbl %s create success.\n", tbl_name);
+    QNSM_LOG(CRIT, "[ INFO ] tbl %s create success.\n", tbl_name);
 
     return ret;
 }
@@ -576,7 +576,7 @@ static void qnsm_svr_host_aging(__attribute__((unused)) struct rte_timer *timer,
             }
             ops = &svr_tbl->ops[data->af];
             ret = ops->f_del_host(data);
-            RTE_LOG(CRIT, QNSM, "[ EVT ]: time %" PRIu64 " lcore %u del vip %s addr %p ret %d\n", jiffies(), rte_lcore_id(), tmp, data, ret);
+            QNSM_LOG(CRIT, "lcore %u del vip %s addr %p ret %d\n", rte_lcore_id(), tmp, data, ret);
         }
 
     }
@@ -666,7 +666,7 @@ static void qnsm_svr_host_agg(__attribute__((unused)) struct rte_timer *timer, v
                     } else {
                         (void)inet_ntop(AF_INET6, &data->addr, tmp, sizeof(tmp));
                     }
-                    RTE_LOG(CRIT, QNSM, "vip %s agg affinity is lcore %u\n", tmp, rte_lcore_id());
+                    QNSM_LOG(CRIT, "vip %s agg affinity is lcore %u\n", tmp, rte_lcore_id());
                 }
             }
         }
@@ -773,7 +773,7 @@ static inline int32_t qnsm_host_lpm_del(uint32_t ip, uint8_t mask_len)
         //memset(ip_data, 0, sizeof(QNSM_SVR_IP_DATA));
         memset(ip_data, 0, offsetof(QNSM_SVR_IP_DATA, tick));
     } else if ((-ENOENT == ret) || (-EINVAL == ret)) {
-        RTE_LOG(CRIT, QNSM, "[ WARN ] dup del vip\n");
+        QNSM_LOG(CRIT, "dup del vip\n");
         return 0;
     }
     (void)rte_lpm_delete(svr_tbl->lpm_tbl, ip, mask_len);
@@ -814,7 +814,7 @@ static QNSM_SVR_IP_DATA* qnsm_svr_add_host(QNSM_SRV_HOST *host, uint8_t is_stati
                           lcore_id, qnsm_svr_host_agg, ip_data);
     if (ret < 0) {
         QNSM_DEBUG(QNSM_DBG_M_VIPAGG, QNSM_DBG_ERR, "cannot set lcore %d agg timer\n", lcore_id);
-        RTE_LOG(CRIT, QNSM, "[ VIP ] init vip %p lcore %d agg timer failed", ip_data, lcore_id);
+        QNSM_LOG(ERR, "init vip %p lcore %d agg timer failed", ip_data, lcore_id);
         (void)qnsm_host_lpm_del(ip, host->mask);
         return NULL;
     }
@@ -825,7 +825,7 @@ static QNSM_SVR_IP_DATA* qnsm_svr_add_host(QNSM_SRV_HOST *host, uint8_t is_stati
                           lcore_id, qnsm_svr_host_aging, ip_data);
     if (ret < 0) {
         QNSM_DEBUG(QNSM_DBG_M_VIPAGG, QNSM_DBG_ERR, "cannot set lcore %d aging timer\n", lcore_id);
-        RTE_LOG(CRIT, QNSM, "[ VIP ] init vip %p lcore %d aging timer failed", ip_data, lcore_id);
+        QNSM_LOG(ERR, "init vip %p lcore %d aging timer failed", ip_data, lcore_id);
         rte_timer_stop(&ip_data->agg_timer);
         (void)qnsm_host_lpm_del(ip, host->mask);
         return NULL;
@@ -872,11 +872,11 @@ static int32_t qnsm_svr_del_host(void *item)
 
     /*del timer*/
     if (rte_timer_stop(&ip_data->agg_timer)) {
-        RTE_LOG(CRIT, QNSM, "stop agg timer failed\n");
+        QNSM_LOG(ERR, "stop agg timer failed\n");
         QNSM_ASSERT(0);
     }
     if (rte_timer_stop(&ip_data->aging_timer)) {
-        RTE_LOG(CRIT, QNSM, "stop aging timer failed\n");
+        QNSM_LOG(ERR, "stop aging timer failed\n");
         QNSM_ASSERT(0);
     }
 
@@ -973,11 +973,11 @@ static int32_t qnsm_svr_ip6_del_host(void *item)
 
     /*del timer*/
     if (rte_timer_stop(&ip_data->agg_timer)) {
-        RTE_LOG(CRIT, QNSM, "stop v6 agg timer failed\n");
+        QNSM_LOG(ERR, "stop v6 agg timer failed\n");
         QNSM_ASSERT(0);
     }
     if (rte_timer_stop(&ip_data->aging_timer)) {
-        RTE_LOG(CRIT, QNSM, "stop v6 aging timer failed\n");
+        QNSM_LOG(ERR, "stop v6 aging timer failed\n");
         QNSM_ASSERT(0);
     }
 
@@ -1218,7 +1218,7 @@ static int32_t qnsm_svr_biz_vip_msg_proc(void *data, uint32_t data_len)
     if (NULL == ip_data) {
         ip_data = ops->f_add_host(&key, 0);
         if (NULL == ip_data) {
-            RTE_LOG(CRIT, QNSM, "[ ERR ]: %s add local vip %s failed\n", __FUNCTION__, tmp);
+            QNSM_LOG(ERR, "add local vip %s failed\n", tmp);
             return ret;
         }
     }
@@ -1244,7 +1244,7 @@ static int32_t qnsm_svr_biz_vip_msg_proc(void *data, uint32_t data_len)
             }
         }
 
-        RTE_LOG(CRIT, QNSM, "lcore %u set dyn vip %s local\n",
+        QNSM_LOG(CRIT, "lcore %u set dyn vip %s local\n",
                 rte_lcore_id(), tmp);
     }
 

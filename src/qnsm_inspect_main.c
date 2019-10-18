@@ -76,8 +76,6 @@ int qnsm_inspect_init(void)
 
     time_init();
 
-    qnsm_log_init();
-
     /*
      *conf parse
      */

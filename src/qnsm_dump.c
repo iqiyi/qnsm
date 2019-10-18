@@ -66,7 +66,7 @@
 #endif
 
 /*DUMP PKT PATH*/
-#define QNSM_DUMP_PKT_PATH       "/data/ads-monitor-mirror/log/"
+#define QNSM_DUMP_PKT_PATH       "./dump/"
 #define QNSM_DUMP_DELAY_SEC    (1)
 #define QNSM_DUMP_DELAY_NSEC   (0)
 
@@ -338,9 +338,9 @@ static int32_t qnsm_dump_vip_msg_proc(void *data, uint32_t data_len)
     vip_dump = ops->f_find_ip(&host);
     if (NULL == vip_dump) {
         if ((vip_dump = ops->f_add_ip(&host))) {
-            RTE_LOG(CRIT, QNSM, "add dump vip %s success\n", tmp);
+            QNSM_LOG(CRIT, "add dump vip %s success\n", tmp);
         } else {
-            RTE_LOG(CRIT, QNSM, "add dump vip %s failed\n", tmp);
+            QNSM_LOG(CRIT, "add dump vip %s failed\n", tmp);
             return -1;
         }
     }
@@ -349,11 +349,11 @@ static int32_t qnsm_dump_vip_msg_proc(void *data, uint32_t data_len)
 
         if (EN_QNSM_CMD_DUMP_PKT == vip_msg->cmd) {
             qnsm_dump_vip_op(vip_dump, 1);
-            RTE_LOG(CRIT, QNSM, "vip %s dump enable\n", tmp);
+            QNSM_LOG(CRIT, "vip %s dump enable\n", tmp);
         }
         if (EN_QNSM_CMD_DISABLE_DUMP_PKT == vip_msg->cmd) {
             qnsm_dump_vip_op(vip_dump, 0);
-            RTE_LOG(CRIT, QNSM, "vip %s dump disable\n", tmp);
+            QNSM_LOG(CRIT, "vip %s dump disable\n", tmp);
         }
     }
 
@@ -415,7 +415,7 @@ DUMP:
         tmp = filename;
 
         /*设置dump文件名*/
-        format_len = snprintf(tmp, sizeof(filename), "%s", QNSM_DUMP_PKT_PATH);
+        format_len = snprintf(tmp, sizeof(filename), "%s", qnsm_get_dump_conf()->dump_dir);
         tmp = tmp + format_len;
 
         if (EN_QNSM_AF_IPv4 == af) {
@@ -479,6 +479,7 @@ void qnsm_dump_run(void *para)
 static void qnsm_dump_hdl_init(pcap_t **dump_hdl)
 {
     struct stat             st;
+    QNSM_DUMP_CFG           *cfg = qnsm_get_dump_conf();
 
     QNSM_ASSERT(dump_hdl);
 
@@ -489,9 +490,12 @@ static void qnsm_dump_hdl_init(pcap_t **dump_hdl)
     QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO, "====dump disable====\n");
 
     /*检查QNSM_DUMP_PKT_PATH是否存在*/
-    if(stat(QNSM_DUMP_PKT_PATH, &st)) {
+    if (NULL == cfg->dump_dir) {
+        cfg->dump_dir = QNSM_DUMP_PKT_PATH;
+    }
+    if(stat(cfg->dump_dir, &st)) {
         QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO, "dump dir not exist!!\n");
-        (void)mkdir(QNSM_DUMP_PKT_PATH, 0755);
+        (void)mkdir(cfg->dump_dir, 0755);
     }
 
     QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO, "dump init end\n");

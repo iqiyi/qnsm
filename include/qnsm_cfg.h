@@ -216,6 +216,10 @@ typedef struct qnsm_edge_cfg {
 } QNSM_EDGE_CFG;
 #endif
 
+typedef struct qnsm_dump_cfg {
+    char *dump_dir;
+} QNSM_DUMP_CFG;
+
 #if QNSM_PART("cmd")
 typedef struct {
     cmdline_parse_ctx_t ctx[16];
@@ -230,6 +234,7 @@ QNSM_PROTO_CFG* qnsm_get_proto_conf(const char *name);
 int32_t qnsm_cmd_init(void **tbl_handle);
 int qnsm_conf_parse(void);
 inline QNSM_EDGE_CFG* qnsm_get_edge_conf(void);
+inline QNSM_DUMP_CFG* qnsm_get_dump_conf(void);
 inline QNSM_SVR_IP_GROUP* qnsm_get_group(uint32_t group_id);
 inline uint16_t qnsm_group_num(void);
 inline uint32_t qnsm_group_is_valid(uint32_t group_id);

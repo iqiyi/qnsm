@@ -207,7 +207,7 @@ static void qnsm_ip_add_policy(enum qnsm_acl_action act, fill_policy_para f_fill
 
     addr.s_addr = rte_cpu_to_be_32(vip_data->vip);
     inet_ntop(AF_INET, (const void *)&addr.s_addr, ip_str, sizeof(ip_str));
-    RTE_LOG(CRIT, QNSM, "add v4 acl rule (act %u vip %s ret %d)\n",
+    QNSM_LOG(CRIT, "add v4 acl rule (act %u vip %s ret %d)\n",
             act,
             ip_str,
             ret);
@@ -239,7 +239,7 @@ static void qnsm_ip_del_policy(enum qnsm_acl_action act, fill_policy_para f_fill
                                    key_found,
                                    acl_entry);
     inet_ntop(AF_INET, (const void *)&addr.s_addr, ip_str, sizeof(ip_str));
-    RTE_LOG(CRIT, QNSM, "del v4 acl rule (act %u vip %s ret %d)\n",
+    QNSM_LOG(CRIT, "del v4 acl rule (act %u vip %s ret %d)\n",
             act,
             ip_str,
             ret);
@@ -594,7 +594,7 @@ static void qnsm_ip6_add_policy(enum qnsm_acl_action act, fill_policy_para f_fil
                                 key_found,
                                 ret_entry);
     inet_ntop(AF_INET6, (const void *)vip_data->vip6, ip_str, sizeof(ip_str));
-    RTE_LOG(CRIT, QNSM, "add v6 acl rule (act %u vip %s ret %d)\n",
+    QNSM_LOG(CRIT, "add v6 acl rule (act %u vip %s ret %d)\n",
             act,
             ip_str,
             ret);
@@ -624,7 +624,7 @@ static void qnsm_ip6_del_policy(enum qnsm_acl_action act, fill_policy_para f_fil
                                    key_found,
                                    acl_entry);
     inet_ntop(AF_INET6, (const void *)vip_data->vip6, ip_str, sizeof(ip_str));
-    RTE_LOG(CRIT, QNSM, "del v6 acl rule (act %u, vip %s, ret %d)\n",
+    QNSM_LOG(CRIT, "del v6 acl rule (act %u, vip %s, ret %d)\n",
             act,
             ip_str,
             ret);
@@ -957,7 +957,7 @@ static int32_t qnsm_inet_biz_vip_msg_proc(void *data, uint32_t data_len)
     if (QNSM_BIZ_VIP_ADD == vip_msg->op) {
         if (!exist) {
             vip_data = ops->f_add_ip(&host, vip_msg->mask);
-            RTE_LOG(CRIT, QNSM, "[INET]: add %s vip %s/%d %s\n",
+            QNSM_LOG(CRIT, "add %s vip %s/%d %s\n",
                     is_local_vip ? "local" : "remote",
                     tmp,
                     vip_msg->mask,
@@ -977,7 +977,7 @@ static int32_t qnsm_inet_biz_vip_msg_proc(void *data, uint32_t data_len)
             || (EN_QNSM_CMD_VIP_DISABLE_CUS_IP_AGG == vip_msg->cmd)) {
             /*set cus ip agg enable*/
             vip_data->cus_ip_agg_enable = (EN_QNSM_CMD_VIP_ENABLE_CUS_IP_AGG == vip_msg->cmd) ? 1 : 0;
-            RTE_LOG(CRIT, QNSM, "vip cus ip statis %s (vip:%s, cmd:%u)\n",
+            QNSM_LOG(CRIT, "vip cus ip statis %s (vip:%s, cmd:%u)\n",
                     (vip_data->cus_ip_agg_enable ? "enable" : "disable"),
                     tmp, vip_msg->cmd);
         }
@@ -1026,7 +1026,7 @@ static int32_t qnsm_inet_biz_vip_msg_proc(void *data, uint32_t data_len)
             || (EN_QNSM_CMD_VIP_DISABLE_SESSION == vip_msg->cmd)) {
             /*vip session enable*/
             vip_data->session_enable = (EN_QNSM_CMD_VIP_ENABLE_SESSION == vip_msg->cmd) ? 1 : 0;
-            RTE_LOG(CRIT, QNSM, "vip session %s cmd (vip:%s, cmd:%u)\n",
+            QNSM_LOG(CRIT, "vip session %s cmd (vip:%s, cmd:%u)\n",
                     (vip_data->session_enable ? "enable" : "disable"),
                     tmp, vip_msg->cmd);
         }
@@ -1142,7 +1142,7 @@ void qnsm_inet_vip_init(void *this)
     ret = rte_timer_reset(&data->vip_timer,
                           INTVAL * rte_get_timer_hz(), PERIODICAL,
                           rte_lcore_id(), qnsm_inet_policy_timer, data->vip_data);
-    RTE_LOG(CRIT, USER1, "sess policy timer init %d\n", ret);
+    QNSM_LOG(CRIT, "sess policy timer init %d\n", ret);
 
     return;
 }

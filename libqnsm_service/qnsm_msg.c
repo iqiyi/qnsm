@@ -285,7 +285,7 @@ int32_t qnsm_msg_publish(void)
     msg->act_head.pub_lcore = lcore_id;
     msg->value_len = 0;
 
-    RTE_LOG(CRIT, QNSM, "[INFO] lcore %d send pub msg to crm\n", lcore_id);
+    QNSM_LOG(INFO, "lcore %d send pub msg to crm\n", lcore_id);
     qnsm_crm_agent_msg_send(msg);
     return 0;
 }
@@ -314,7 +314,7 @@ int32_t qnsm_msg_subscribe(uint32_t target_lcore_id)
     msg->act_head.pub_lcore = target_lcore_id;
     msg->value_len = 0;
 
-    RTE_LOG(CRIT, QNSM, "[INFO] lcore %d send sub lcore %d msg to crm\n", lcore_id, target_lcore_id);
+    QNSM_LOG(INFO, "lcore %d send sub lcore %d msg to crm\n", lcore_id, target_lcore_id);
     qnsm_crm_agent_msg_send(msg);
 
     return 0;
