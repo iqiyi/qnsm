@@ -224,14 +224,14 @@ static inline void  qnsm_updt_tbl_mode(QNSM_TBL_PARA *tbl_para, QNSM_TBL_INFO *t
             if (diff >= tbl_info->emergency_recovery_num) {
                 tbl->emergency_mode = 0;
                 QNSM_DEBUG(QNSM_DBG_M_TBL, QNSM_DBG_WARN, "[%s] tbl switch to normal mode\n", tbl_para->name);
-                RTE_LOG(CRIT, QNSM, "[%s, lcore %u] tbl switch to normal mode\n",
+                QNSM_LOG(CRIT, "[%s, lcore %u] tbl switch to normal mode\n",
                         tbl_para->name, rte_lcore_id());
             }
         } else {
             if (diff < tbl_info->emergency_diff_num) {
                 tbl->emergency_mode = 1;
                 QNSM_DEBUG(QNSM_DBG_M_TBL, QNSM_DBG_WARN, "[%s] tbl switch to emergency mode\n", tbl_para->name);
-                RTE_LOG(CRIT, QNSM, "[%s, lcore %u] tbl switch to emergency mode, diff_item_num %u\n",
+                QNSM_LOG(CRIT, "[%s, lcore %u] tbl switch to emergency mode, diff_item_num %u\n",
                         tbl_para->name, rte_lcore_id(), tbl_info->emergency_diff_num);
             }
         }
@@ -241,7 +241,7 @@ static inline void  qnsm_updt_tbl_mode(QNSM_TBL_PARA *tbl_para, QNSM_TBL_INFO *t
         tbl->emergency_mode = 1;
         if (0 == prev_mode) {
             QNSM_DEBUG(QNSM_DBG_M_TBL, QNSM_DBG_WARN, "[%s] tbl switch to emergency mode\n", tbl_para->name);
-            RTE_LOG(CRIT, QNSM, "[%s, lcore %u] tbl switch to emergency mode, diff_item_num %u\n",
+            QNSM_LOG(CRIT, "[%s, lcore %u] tbl switch to emergency mode, diff_item_num %u\n",
                     tbl_para->name, rte_lcore_id(), tbl_info->emergency_diff_num);
         }
     }

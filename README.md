@@ -17,7 +17,7 @@ DDOS检测功能包括:
 ## IDPS
 IDPS模块基于[Suricata](https://github.com/OISF/suricata)，并新增了如下特性，
 * 支持lib化编译安装，基于Suricata 4.1.0版本
-* 支持事件以Kafka方式输出，提升了事件吞吐量，便于进一步数据分析
+* 支持事件以Kafka方式输出，提升事件吞吐量，便于进一步数据分析
 
 ## 部署描述
 ![deploy.JPG](./resources/pic/deploy.JPG)
@@ -71,7 +71,6 @@ Centos：
 ```bash
 $ yum install -y libpcap-devel pcre-devel file-devel libyaml-devel jansson-devel libcap-ng-devel librdkafka-devel nss-devel nspr-devel make gcc
 $ yum install -y libxml2-devel
-$ ln -s /usr/include/libxml2/libxml /usr/include/libxml
 $ yum install -y  python-pip
 $ pip install configparser
 ```
@@ -90,7 +89,7 @@ $ tar vxf dpdk-16.11.2.tar.xz
 ### DPDK 编译安装
 
 ```bash
-$ cd dpdk-16.11.2
+$ cd dpdk-stable-16.11.2
 $ export RTE_SDK=`pwd`
 $ export RTE_TARGET=x86_64-native-linuxapp-gcc
 $ make install T=${RTE_TARGET} DESTDIR=install
@@ -132,6 +131,7 @@ HugePages_Rsvd:        0
 HugePages_Surp:        0
 Hugepagesize:      '2048 kB'
 ```
+ens7f0（0000:06:00.0）和ens7f1（0000:06:00.0）网卡驱动已经绑定DPDK驱动。
 
 ### 编译安装IDPS lib
 
@@ -141,9 +141,9 @@ Hugepagesize:      '2048 kB'
 ```bash
 $ cd scripts
 $ sh build_idps.sh
-$ ls /usr/local/lib
+$ ls /usr/local/lib | egrep 'suri|htp'
 libhtp.a  libhtp.la  libhtp.so  libhtp.so.2  libhtp.so.2.0.0  libsuri.a  libsuri.la  libsuri.so  libsuri.so.0  libsuri.so.0.0.0 
-$ ls /usr/local/include/
+$ ls /usr/local/include/ | egrep 'suri|htp'
 htp  suricata
 ```
 
@@ -155,7 +155,16 @@ $ sh build_qnsm_lib.sh
 $ ll $RTE_SDK/$RTE_TARGET/lib/libqnsm_service.a
 ```
 
-编译qnsm主程序。支持编译成debug或者release版本，默认release版本。debug版本提供一些调试命令用于展示运行时数据。
+支持编译成debug或者release版本，默认release版本。
+
+debug版本提供一些调试命令用于展示运行时数据。如果需要编译debug版本，执行以下命令。
+```
+$ cat ../config
+CONFIG_QNSM_LIBQNSM_IDPS=y
+CONFIG_DEBUG_QNSM=n
+$ sed -i '/CONFIG_DEBUG_QNSM/s/=n/=y/g' ../config
+```
+编译qnsm主程序。
 ```
 $ cd ..
 $ make
@@ -170,14 +179,42 @@ ddos、idps、ddos-idps是qnsm支持的三种部署形态，默认以ddos-idps�
 启动QNSM之前，需要依据[`配置手册`](./doc/configure-tutorial.md)修改`/var/qnsm`安装目录下的配置文件。 
 
 ## 启动 QNSM
+QNSM日志支持syslog输出，相关配置如下，可以参考[`配置手册`](./doc/configure-tutorial.md)。
+```
+$ cat /var/qnsm/qnsm_edge.xml 
+<CONFIG>
+...
+    <log>
+            <syslog>
+                    <facility>local5</facility>
+                    <log-level>Critical</log-level>
+            </syslog>
+    </log>
+</CONFIG>
+```
 
+修改syslog配置，日志存储在/var/log/qnsm目录下。
+```
+$ mkdir -p /var/log/qnsm
+$ echo "local5.*                                                /var/log/qnsm/qnsm.log" >> /etc/rsyslog.d/qnsm.conf
+$ systemctl restart rsyslog.service
+$ cp -f conf/qnsm.logrotate /etc/logrotate.d
+$ logrotate /etc/logrotate.conf
+```
+
+创建suricata.yaml配置文件中的目录列表，包括规则文件目录，日志目录等。
+```
+$ mkdir -p /var/log/suricata
+```
+
+启动QNSM。
 ```bash
 $ cd /var/qnsm
-$ ./qnsm-inspect -f qnsm_inspect.cfg -c . -p 1
+$ ./qnsm-inspect -f qnsm_inspect.cfg -c . -p 3
 ```
 * -f 参数指定组件配置文件
 * -c 参数指定配置文件目录
-* -p 参数指定使用网卡ID的16进制掩码，如果有两张网卡，该值为3（0011），依此类推
+* -p 参数指定使用网卡ID的16进制掩码，如果有两张网卡，该值为3（0b0011），依此类推
 
 另外，可以编写多个部署配置文件（qnsm_inspect_x.cfg），这样的话，可以启动多个QNSM进程。
 
@@ -215,11 +252,18 @@ $ cat qnsm_log_qnsm | grep 'master cmd'
 QNSM: 1557921514 master cmd msg {"id":0,"op":"ip_dump_pkt_enable","content":[{"idc":"idc_aaa","proto":"any","vip":"11.22.33.44","vport":"any"}]}
 ```
 
-检查pcap文件，可以存储在本地或者云端。
+检查pcap文件，默认存储在运行目录下面的dump目录，支持配置修改存储目录。
 ```bash
-$ cd /data
-$ tail -n 20 dump_oss.log 
-2019-05-15 Wednesday 19:59:00 INFO dump_oss.py 168 26239 close write file: /data/ads-monitor-mirror/log/11.22.33.44-core4-20190515-1958.pcap 
+$ ls dump
+xx.xx.xx.xx-core5-20191018-1522.pcap
+```
+dump目录配置如下，可以参考[`配置手册`](./doc/configure-tutorial.md)。
+```
+$ cat /var/qnsm/qnsm_edge.xml 
+<CONFIG>
+...
+    <dump-dir>/data/qnsm</dump-dir>
+</CONFIG>
 ```
 
 ### IDPS事件
@@ -284,7 +328,7 @@ $ tail -n 20 dump_oss.log
 
 数据包吞吐可以线性增长，但是瓶颈存在于压力最大的那个组件。
 
-在我们的测试环境中, 开启超线程， DDOS检测和IDPS混合部署，[performance](doc/performance.md)说明了测试方法和数据。
+在我们的测试环境中, 开启超线程， DDOS检测和IDPS混合部署，[performance](doc/performance.md)包含测试方法和数据。
 
 # 版权说明
 

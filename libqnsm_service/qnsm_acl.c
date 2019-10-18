@@ -92,7 +92,7 @@ int qnsm_acl_tbl_add_bulk(
 #ifdef  DEBUG_QNSM
     if (0 == ret) {
         for (index = 0; index < n_keys; index++) {
-            RTE_LOG(CRIT, QNSM, "add acl rule %u action %d\n",
+            QNSM_LOG(INFO, "add acl rule %u action %d\n",
                     index,
                     ((QNSM_ACL_ENTRY *)(entries_ptr_arr[index]))->act);
         }
@@ -217,7 +217,7 @@ int qnsm_acl_init(void **tbl_handle)
 
     tbl_hdl = rte_zmalloc_socket("ACL", sizeof(QNSM_ACL_HANDLE), QNSM_DDOS_MEM_ALIGN, rte_socket_id());
     if (NULL == tbl_hdl) {
-        RTE_LOG(CRIT, QNSM, "acl handle init failed\n");
+        QNSM_LOG(ERR, "acl handle init failed\n");
         return -1;
     }
     memset(tbl_hdl, 0, sizeof(QNSM_ACL_HANDLE));

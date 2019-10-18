@@ -32,6 +32,7 @@
 #include <getopt.h>
 
 #include <sys/stat.h>
+#include <sys/syslog.h>
 #include <unistd.h>
 
 
@@ -97,8 +98,9 @@
 
 
 QNSM_SESSM_CFG *g_sessm_cfg;
-QNSM_VIP_CFG   g_qnsm_vip_cfg;
-QNSM_EDGE_CFG   *g_qnsm_edge_cfg = NULL;
+QNSM_VIP_CFG    g_qnsm_vip_cfg;
+QNSM_EDGE_CFG  *g_qnsm_edge_cfg = NULL;
+QNSM_DUMP_CFG   g_qnsm_dump_cfg;
 
 uint32_t    g_qnsm_dbg = 0;
 
@@ -894,7 +896,7 @@ redisContext* qnsm_cfg_init_redis_ctx(void)
 
             /*auth*/
             while(NULL == (reply = redisCommand(c, cmd)));
-            RTE_LOG(CRIT, QNSM, "%llu redis connect success\n", jiffies());
+            QNSM_LOG(INFO, "%llu redis connect success\n", jiffies());
             break;
         }
     }
@@ -1018,7 +1020,7 @@ int qnsm_vip_conf_parse(const char *conf_file_path)
                         continue;
                     }
 
-                    RTE_LOG(CRIT, QNSM, "%u) %s\n", i, reply->element[i]->str);
+                    QNSM_LOG(INFO, "%u) %s\n", i, reply->element[i]->str);
                     p = strtok(reply->element[i]->str, "/");
                     if(p) {
                         if (0 >= inet_pton(AF_INET, p, &net_seg.addr.in4_addr)) {
@@ -1026,7 +1028,7 @@ int qnsm_vip_conf_parse(const char *conf_file_path)
                         }
                         tmp_addr.in4_addr.s_addr = ntohl(net_seg.addr.in4_addr.s_addr);
                         if (qnsm_match_local_net_segment(EN_QNSM_AF_IPv4, &tmp_addr)) {
-                            RTE_LOG(CRIT, QNSM, "%u) %s local idc segment\n", i, reply->element[i]->str);
+                            QNSM_LOG(INFO, "%u) %s local idc segment\n", i, reply->element[i]->str);
                             continue;
                         }
                     }
@@ -1038,7 +1040,7 @@ int qnsm_vip_conf_parse(const char *conf_file_path)
                     services_cfg->v4_net[services_cfg->v4_net_num] = net_seg;
                     services_cfg->v4_net_num++;
                 }
-                RTE_LOG(CRIT, QNSM, "v4 net segments %u\n", services_cfg->v4_net_num);
+                QNSM_LOG(INFO, "v4 net segments %u\n", services_cfg->v4_net_num);
             }
 
             freeReplyObject(reply);
@@ -1051,7 +1053,7 @@ int qnsm_vip_conf_parse(const char *conf_file_path)
                         continue;
                     }
 
-                    RTE_LOG(CRIT, QNSM, "%u) %s\n", i, reply->element[i]->str);
+                    QNSM_LOG(INFO, "%u) %s\n", i, reply->element[i]->str);
                     p = strtok(reply->element[i]->str, "/");
                     if(p) {
                         if (0 >= inet_pton(AF_INET6, p, &net_seg.addr.in6_addr)) {
@@ -1059,7 +1061,7 @@ int qnsm_vip_conf_parse(const char *conf_file_path)
                         }
 
                         if (qnsm_match_local_net_segment(EN_QNSM_AF_IPv6, &net_seg.addr)) {
-                            RTE_LOG(CRIT, QNSM, "%u) %s local idc segment\n", i, reply->element[i]->str);
+                            QNSM_LOG(INFO, "%u) %s local idc segment\n", i, reply->element[i]->str);
                             continue;
                         }
                     }
@@ -1259,6 +1261,204 @@ void qnsm_parse_kafka_cfg(xmlDocPtr doc, xmlNodePtr cur, QNSM_KAFKA_CFG *kafka_c
     return;
 }
 
+static void qnsm_parse_syslog(xmlDocPtr doc, xmlNodePtr cur, QNSM_LOG_CFG *log_cfg)
+{
+    xmlChar *key;
+
+    cur = cur->xmlChildrenNode;
+
+    log_cfg->sys_log_conf.enabled = 1;
+    while (cur != NULL) {
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"enable"))) {
+            key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            if (!xmlStrncasecmp(key, (const xmlChar *)"off", strlen("off"))
+                || !xmlStrncasecmp(key, (const xmlChar *)"no", strlen("no"))) {
+                log_cfg->sys_log_conf.enabled = 0;
+            } else {
+                log_cfg->sys_log_conf.enabled = 1;
+            }
+            xmlFree(key);
+        }
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"facility"))) {
+            key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            log_cfg->sys_log_conf.facility = strdup((char *)key);
+            xmlFree(key);
+        }
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"log-level"))) {
+            key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            log_cfg->sys_log_conf.log_level = strdup((char *)key);
+            xmlFree(key);
+        }
+
+        cur = cur->next;
+    }
+
+    return;
+}
+
+static void qnsm_parse_filelog(xmlDocPtr doc, xmlNodePtr cur, QNSM_LOG_CFG *log_cfg)
+{
+    xmlChar *key;
+
+    cur = cur->xmlChildrenNode;
+
+    while (cur != NULL) {
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"log-dir"))) {
+            key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            log_cfg->file_log_conf.log_dir = strdup((char *)key);
+            xmlFree(key);
+        }
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"log-level"))) {
+            key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            log_cfg->file_log_conf.log_level = strdup((char *)key);
+            xmlFree(key);
+        }
+
+        cur = cur->next;
+    }
+
+    return;
+}
+
+static void qnsm_parse_log_cfg(xmlDocPtr doc, xmlNodePtr cur, QNSM_LOG_CFG *log_cfg)
+{
+    cur = cur->xmlChildrenNode;
+
+    while (cur != NULL) {
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"filelog"))) {
+            qnsm_parse_filelog(doc, cur, log_cfg);
+        }
+
+        if ((!xmlStrcmp(cur->name, (const xmlChar *)"syslog"))) {
+            qnsm_parse_syslog(doc, cur, log_cfg);
+        }
+        cur = cur->next;
+    }
+    return;
+}
+
+static void qnsm_init_log(void)
+{
+    static struct {
+            char *facility;
+            int value;
+    } syslog_facility_map[] = {
+        { "auth",           LOG_AUTH },
+        { "authpriv",       LOG_AUTHPRIV },
+        { "cron",           LOG_CRON },
+        { "daemon",         LOG_DAEMON },
+        { "ftp",            LOG_FTP },
+        { "kern",           LOG_KERN },
+        { "lpr",            LOG_LPR },
+        { "mail",           LOG_MAIL },
+        { "news",           LOG_NEWS },
+        { "security",       LOG_AUTH },
+        { "syslog",         LOG_SYSLOG },
+        { "user",           LOG_USER },
+        { "uucp",           LOG_UUCP },
+        { "local0",         LOG_LOCAL0 },
+        { "local1",         LOG_LOCAL1 },
+        { "local2",         LOG_LOCAL2 },
+        { "local3",         LOG_LOCAL3 },
+        { "local4",         LOG_LOCAL4 },
+        { "local5",         LOG_LOCAL5 },
+        { "local6",         LOG_LOCAL6 },
+        { "local7",         LOG_LOCAL7 },
+        { NULL,             -1         }
+    };
+    static struct {
+            char *log_level;
+            int value;
+            int rte_log_level;
+    } log_level_map[ ] = {
+        { "Not set",        QNSM_LOG_NOTSET,  RTE_LOG_EMERG},
+        { "None",           QNSM_LOG_NONE,    RTE_LOG_EMERG},
+        { "Emergency",      QNSM_LOG_EMERG,   RTE_LOG_EMERG},
+        { "Alert",          QNSM_LOG_ALERT,   RTE_LOG_ALERT},
+        { "Critical",       QNSM_LOG_CRIT,    RTE_LOG_CRIT},
+        { "Error",          QNSM_LOG_ERR,     RTE_LOG_ERR},
+        { "Warning",        QNSM_LOG_WARNING, RTE_LOG_WARNING},
+        { "Notice",         QNSM_LOG_NOTICE,  RTE_LOG_NOTICE},
+        { "Info",           QNSM_LOG_INFO,    RTE_LOG_INFO },
+        { "Debug",          QNSM_LOG_DEBUG,   RTE_LOG_DEBUG },
+        { NULL,             -1,               -1}
+    };
+    QNSM_LOG_CFG *cfg = qnsm_get_log_conf();
+    int i = 0;
+    int facility = -1;
+
+    if ( cfg  == NULL) {
+        QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_ERR,
+            "Fatal error encountered in qnsm_init_log. Exiting...");
+        exit(-1);
+    }
+
+    if (cfg->sys_log_conf.enabled) {
+        cfg->type = EN_QNSM_LOG_SYSLOG;
+    } else {
+        cfg->type = EN_QNSM_LOG_RTE;
+    }
+
+    switch (cfg->type) {
+        case EN_QNSM_LOG_RTE: {
+            char path[256] = {0};
+            struct app_params *app = qnsm_service_get_cfg_para();
+            FILE *log_file = NULL;
+
+            snprintf(path, sizeof(path), "%s/qnsm%s.log",
+                (NULL == cfg->file_log_conf.log_dir) ? "/var/log/qnsm" : cfg->file_log_conf.log_dir, app->inst_id);
+            log_file = fopen(path, "w+");
+            if (log_file) {
+                (void)rte_openlog_stream(log_file);
+            }
+
+            cfg->log_level = rte_get_log_level();
+            for (i = 0; (cfg->file_log_conf.log_level) && (NULL != log_level_map[i].log_level); i++) {
+                if (0 == strcmp(log_level_map[i].log_level, cfg->file_log_conf.log_level)) {
+                    cfg->log_level = log_level_map[i].rte_log_level;
+                    break;
+                }
+            }
+            if (cfg->log_level != rte_get_log_level()) {
+                rte_set_log_level(cfg->log_level);
+            }
+            QNSM_LOG(INFO, "log file is %s\n", path);
+            break;
+        }
+        case EN_QNSM_LOG_SYSLOG: {
+            for (i = 0; (cfg->sys_log_conf.facility) && (NULL != syslog_facility_map[i].facility); i++) {
+                if (0 == strcmp(syslog_facility_map[i].facility, cfg->sys_log_conf.facility)) {
+                    facility = syslog_facility_map[i].value;
+                    break;
+                }
+            }
+            cfg->log_level = QNSM_LOG_INFO;
+            for (i = 0; (cfg->sys_log_conf.log_level) && (NULL != log_level_map[i].log_level); i++) {
+                if (0 == strcmp(log_level_map[i].log_level, cfg->sys_log_conf.log_level)) {
+                    cfg->log_level = log_level_map[i].value;
+                    break;
+                }
+            }
+
+            if (facility == -1)
+                facility = LOG_LOCAL0;
+            openlog(NULL, LOG_NDELAY, facility);
+            QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO,
+                "init syslog facility %d level %d", facility, cfg->log_level);
+            break;
+        }
+        default:
+            return;
+    }
+
+    return;
+}
+
+inline QNSM_DUMP_CFG* qnsm_get_dump_conf(void)
+{
+    return &g_qnsm_dump_cfg;
+}
+
 #if QNSM_PART("edge cfg")
 
 uint32_t qnsm_edge_init_inst_id(void)
@@ -1304,6 +1504,7 @@ int qnsm_edge_conf_parse(const char *conf_file_path)
     uint32_t kafka_cnt = 0;
     uint32_t index = 0;
     QNSM_EDGE_CFG *global_cfg = qnsm_get_edge_conf();
+    QNSM_DUMP_CFG *dump_cfg = &g_qnsm_dump_cfg;
 
     doc = xmlReadFile(conf_file_path, NULL, 0);
     if(doc == NULL) {
@@ -1349,6 +1550,16 @@ int qnsm_edge_conf_parse(const char *conf_file_path)
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
             QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO, "consumer_group : %s\n", key);
             strncpy(global_cfg->cons_group, (const char*)key, sizeof(global_cfg->cons_group));
+            xmlFree(key);
+        }
+
+        if ((!xmlStrcmp(node->name, (const xmlChar *)"log"))) {
+            qnsm_parse_log_cfg(doc, node, qnsm_get_log_conf());
+        }
+
+        if ((!xmlStrcmp(node->name, (const xmlChar *)"dump-dir"))) {
+            key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+            dump_cfg->dump_dir = strdup((char *)key);
             xmlFree(key);
         }
     }
@@ -1412,6 +1623,7 @@ int qnsm_conf_parse(void)
             return ret;
         }
     }
+    qnsm_init_log();
 
     /*sessm conf*/
     (void)qnsm_sessm_conf_init();
@@ -1424,24 +1636,7 @@ int qnsm_conf_parse(void)
             return ret;
         }
     }
+
+
     return 0;
 }
-
-void qnsm_log_init(void)
-{
-    FILE *log_file = NULL;
-    char cwd[256] = {0};
-    char path[256] = {0};
-    struct app_params *app = qnsm_service_get_cfg_para();
-
-    (void)getcwd(cwd, sizeof(cwd));
-    snprintf(path, sizeof(path), "%s/log_qnsm%s", cwd, app->inst_id);
-    log_file = fopen(path, "w+");
-    if (log_file) {
-        (void)rte_openlog_stream(log_file);
-    }
-    RTE_LOG(CRIT, QNSM, "log file is %s\n", path);
-    return;
-}
-
-

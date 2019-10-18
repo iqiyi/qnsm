@@ -75,5 +75,11 @@
             <broker>yyy:9092</broker>
         </brokers>
     </kafka>
+	<log>
+		<syslog>
+			<facility>local5</facility>
+			<log-level>Critical</log-level>
+		</syslog>
+	</log>
 </CONFIG>
 

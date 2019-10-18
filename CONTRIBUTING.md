@@ -44,6 +44,7 @@ Switched to a new branch 'devel'
 $ git branch --set-upstream-to=origin/devel devel
 Branch devel set up to track remote branch devel from origin.
 $ git pull 
+$ git pull upstream devel
 ```
 
 ## 创建自己的分支
@@ -89,5 +90,6 @@ $ git push origin feature-contribute-doc
 
 PR被关闭后，删除分支
 ```bash
-$ git branch -d feature-contribute-doc
+$ git branch -D feature-contribute-doc
+$ git push origin --delete feature-contribute-doc
 ```

@@ -69,6 +69,13 @@
     		<broker>yyyy:9092</broker>
     	</brokers>
     </kafka>
+    <log>											<!-- syslog 配置 -->
+        <syslog>
+                <facility>local5</facility>
+                <log-level>Critical</log-level>				<!-- Emergency/Alert/Critical/Error/Warning/Notice/Info/Debug，级别递增 -->
+        </syslog>
+    </log>
+	<dump-dir>/data/qnsm</dump-dir>					<!-- pcap文件存储目录 -->
 </CONFIG>
 ```
 

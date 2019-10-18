@@ -119,7 +119,7 @@ threshold-file: /usr/local/etc/suricata/threshold.config
 # The default logging directory.  Any log or output file will be
 # placed here if its not specified with a full path name. This can be
 # overridden with the -l command line parameter.
-default-log-dir: /usr/local/var/log/suricata/
+default-log-dir: /var/log/suricata/
 
 # global stats configuration
 stats:
@@ -143,7 +143,7 @@ outputs:
       kafka:
         brokers: > 
          xxxx:port1,
-         yyyy:port1,
+         yyyy:port1
         topic: nsm_event
         partitions: 5
       payload-hex: yes
@@ -536,7 +536,7 @@ logging:
   - file:
       enabled: yes
       level: info
-      filename: /usr/local/var/log/suricata/suricata.log
+      filename: /var/log/suricata/suricata.log
       # type: json
   - syslog:
       enabled: no
@@ -965,7 +965,7 @@ sensor-name: dc_name:ip-1
 # Default location of the pid file. The pid file is only used in
 # daemon mode (start Suricata with -D). If not running in daemon mode
 # the --pidfile command line option must be used to create a pid file.
-#pid-file: /usr/local/var/run/suricata.pid
+#pid-file: /var/run/suricata.pid
 
 # Daemon working directory
 # Suricata will change directory to this one if provided

@@ -18,10 +18,14 @@
 #ifndef __UTIL__
 #define __UTIL__
 
+#include <rte_common.h>
+#include <rte_log.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <sys/syslog.h>
 
 
 #define QNSM_DDOS_MEM_ALIGN (RTE_CACHE_LINE_SIZE)
@@ -92,22 +96,65 @@ uint64_t get_diff_time(uint64_t time_now, uint64_t prev_time);
 
 #define PREFETCH_OFFSET 4
 
-/* ctrl conditions */
-#define QnsmCtrlCondT pthread_cond_t
-#define QnsmCtrlCondInit pthread_cond_init
-#define QnsmCtrlCondSignal pthread_cond_signal
-#define QnsmCtrlCondTimedwait pthread_cond_timedwait
-#define QnsmCtrlCondWait pthread_cond_wait
-#define QnsmCtrlCondDestroy pthread_cond_destroy
+enum en_qnsm_log_type {
+    EN_QNSM_LOG_RTE = 0,
+    EN_QNSM_LOG_SYSLOG,
+    EN_QNSM_LOG_MAX,
+};
 
-/* ctrl mutex */
-#define QnsmCtrlMutex pthread_mutex_t
-#define QnsmCtrlMutexAttr pthread_mutexattr_t
-#define QnsmCtrlMutexInit(mut, mutattr ) pthread_mutex_init(mut, mutattr)
-#define QnsmCtrlMutexLock(mut) pthread_mutex_lock(mut)
-#define QnsmCtrlMutexTrylock(mut) pthread_mutex_trylock(mut)
-#define QnsmCtrlMutexUnlock(mut) pthread_mutex_unlock(mut)
-#define QnsmCtrlMutexDestroy pthread_mutex_destroy
+enum {
+    QNSM_LOG_NOTSET = -1,
+    QNSM_LOG_NONE = 0,
+    QNSM_LOG_EMERG,
+    QNSM_LOG_ALERT,
+    QNSM_LOG_CRIT,
+    QNSM_LOG_ERR,
+    QNSM_LOG_WARNING,
+    QNSM_LOG_NOTICE,
+    QNSM_LOG_INFO,
+    QNSM_LOG_DEBUG,
+    QNSM_LOG_LEVEL_MAX,
+};
 
+typedef struct qnsm_log_cfg {
+    enum en_qnsm_log_type type;
+    int log_level;
+
+    /*file log conf*/
+    struct {
+        char *log_dir;
+        char *log_level;
+    } file_log_conf;
+
+    /*syslog conf*/
+    struct {
+        uint8_t enabled;
+        char *facility;
+        char *log_level;
+    } sys_log_conf;
+} QNSM_LOG_CFG;
+
+inline QNSM_LOG_CFG* qnsm_get_log_conf(void);
+
+#define QNSM_LOG(level, format, ...)\
+{\
+    switch (qnsm_get_log_conf()->type) {\
+        case EN_QNSM_LOG_RTE: {\
+            RTE_LOG(level, QNSM, "%" PRIu64 " - (%s:%d) <%s> "format, \
+                jiffies(), __FILE__, __LINE__, #level, ##__VA_ARGS__);\
+            break;\
+        }\
+        case EN_QNSM_LOG_SYSLOG: {\
+            if (qnsm_get_log_conf()->log_level >= QNSM_LOG_##level) {\
+                syslog(LOG_##level, "%" PRIu64 " - (%s:%d) <%s> "format, \
+                    jiffies(), __FILE__, __LINE__, #level, ##__VA_ARGS__);\
+            }\
+            break;\
+        }\
+        case EN_QNSM_LOG_MAX: {\
+            break;\
+        }\
+    }\
+}
 
 #endif

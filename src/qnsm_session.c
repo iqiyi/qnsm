@@ -401,7 +401,7 @@ static void qnsm_sess_5tuple_acl_init(void)
                               sizeof(QNSM_ACL_ENTRY));
     QNSM_ASSERT(tbl);
 
-    RTE_LOG(CRIT, QNSM, "acl tbl init success\n");
+    QNSM_LOG(CRIT, "acl tbl init success\n");
     return;
 }
 

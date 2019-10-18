@@ -180,7 +180,7 @@ int32_t qnsm_master_redis_init(redisContext **pp_ctx, const char *addr, uint16_t
 
             /*auth*/
             while(NULL == (reply = redisCommand(c, cmd)));
-            RTE_LOG(CRIT, QNSM, "%llu redis connect success\n", jiffies());
+            QNSM_LOG(CRIT, "%llu redis connect success\n", jiffies());
             break;
         }
     }
@@ -201,7 +201,6 @@ static int32_t qnsm_master_vip_add_msg_proc(void *data, uint32_t data_len)
     uint32_t len = 0;
     int32_t mask = 0;
     QNSM_BIZ_VIP_MSG vip_msg;
-    uint64_t time = jiffies();
 
     af = *(uint32_t *)(buf + len);
     len += sizeof(uint32_t);
@@ -287,7 +286,7 @@ static int32_t qnsm_master_vip_add_msg_proc(void *data, uint32_t data_len)
                                   &vip_msg,
                                   1);
         QNSM_DEBUG(QNSM_DBG_M_VIPAGG, QNSM_DBG_EVT, "remmote idc vip %s\n", ip_str);
-        RTE_LOG(CRIT, QNSM, "[ MASTER ] %" PRIu64 " ip:%s, local_vip:0 match all net segments\n", time, ip_str);
+        QNSM_LOG(CRIT, "ip:%s, local_vip:0 match all net segments\n", ip_str);
         return ret;
     }
 
@@ -336,7 +335,7 @@ static int32_t qnsm_master_vip_add_msg_proc(void *data, uint32_t data_len)
                                           &vip_msg,
                                           1);
                 QNSM_DEBUG(QNSM_DBG_M_VIPAGG, QNSM_DBG_EVT, "rcv redis dyn vip ack %s success\n", ip_str);
-                RTE_LOG(CRIT, QNSM, "[ MASTER ] %llu rcv redis dyn vip ack str %s, (ip:%s, local_vip:%u)\n", time, reply->str, ip_str, is_local_vip);
+                QNSM_LOG(CRIT, "rcv redis dyn vip ack str %s, (ip:%s, local_vip:%u)\n", reply->str, ip_str, is_local_vip);
                 break;
             }
             case REDIS_REPLY_NIL:
@@ -349,10 +348,10 @@ static int32_t qnsm_master_vip_add_msg_proc(void *data, uint32_t data_len)
                                           QNSM_MSG_SYN_BIZ_VIP,
                                           &vip_msg,
                                           1);
-                RTE_LOG(CRIT, QNSM, "[ MASTER ] %llu rcv redis dyn vip nil, (ip:%s, local_vip:%u)\n", time, ip_str, is_local_vip);
+                QNSM_LOG(CRIT, "rcv redis dyn vip nil, (ip:%s, local_vip:%u)\n", ip_str, is_local_vip);
                 break;
             case REDIS_REPLY_ERROR:
-                RTE_LOG(CRIT, QNSM, "[ MASTER ] %llu rcv redis dyn vip ack err %s, (ip:%s)\n", time, reply->str, ip_str);
+                QNSM_LOG(CRIT, "rcv redis dyn vip ack err %s, (ip:%s)\n", reply->str, ip_str);
                 break;
             default:
                 break;
@@ -374,7 +373,7 @@ static int32_t qnsm_master_vip_add_msg_proc(void *data, uint32_t data_len)
                               &vip_msg,
                               1);
     QNSM_DEBUG(QNSM_DBG_M_VIPAGG, QNSM_DBG_EVT, "not all idc vip %s\n", ip_str);
-    RTE_LOG(CRIT, QNSM, "[ MASTER ] %" PRIu64 " ip:%s, local_vip:0\n", time, ip_str);
+    QNSM_LOG(CRIT, "ip:%s, local_vip:0\n", ip_str);
 
     return ret;
 }
@@ -431,7 +430,7 @@ int32_t qnsm_dpi_policy_statis_msg_proc(void *data, uint32_t data_len)
 
     if (root) {
         s = cJSON_Print(root);
-        RTE_LOG(CRIT, QNSM, "send dpi policy statis to borderm, %s\n", s);
+        QNSM_LOG(CRIT, "send dpi policy statis to borderm, %s\n", s);
         cJSON_free_fun(s);
         cJSON_Delete(root);
     }
@@ -467,7 +466,6 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
     uint32_t arr_size = 0;
     uint32_t index = 0;
     QNSM_POLICY_MSG_DATA *policy_msg_data = NULL;
-    uint64_t time;
     int32_t ret = 0;
     int32_t af = 0;
     QNSM_IN_ADDR addr;
@@ -476,8 +474,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
     if (NULL == payload) {
         return;
     }
-    time = jiffies();
-    RTE_LOG(CRIT, QNSM, "%" PRIu64 " master cmd msg %s\n", time, payload);
+    QNSM_LOG(CRIT, "master cmd msg %s\n", payload);
 
     root = cJSON_Parse(payload);
     if (NULL == root) {
@@ -536,7 +533,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                     ret = -1;
                 }
                 if (0 >= ret) {
-                    RTE_LOG(CRIT, QNSM, "[ ERR ] vip address %s invalid\n", array_item->valuestring);
+                    QNSM_LOG(CRIT, "vip address %s invalid\n", array_item->valuestring);
                     break;
                 }
                 if (dc_name_invalid && (0 == qnsm_match_local_net_segment(af, &addr))) {
@@ -553,7 +550,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                                           QNSM_MSG_SYN_BIZ_VIP,
                                           &vip_msg,
                                           1);
-                RTE_LOG(CRIT, QNSM, "%" PRIu64 " rcv statis cmd msg, (cmd:%d, ip:%s)\n", time, cmd, array_item->valuestring);
+                QNSM_LOG(CRIT, "rcv statis cmd msg, (cmd:%d, ip:%s)\n", cmd, array_item->valuestring);
             }
             break;
         }
@@ -592,7 +589,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                         ret = -1;
                     }
                     if (0 >= ret) {
-                        RTE_LOG(CRIT, QNSM, "[ ERR ] vip address %s invalid\n", array_item->valuestring);
+                        QNSM_LOG(ERR, "vip address %s invalid\n", array_item->valuestring);
                         break;
                     }
 
@@ -606,7 +603,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                     continue;
                 }
 
-                RTE_LOG(CRIT, QNSM, "%" PRIu64 " rcv dump cmd msg, (cmd:%d, ip:%s)\n", time, cmd, array_item->valuestring);
+                QNSM_LOG(CRIT, "rcv dump cmd msg, (cmd:%d, ip:%s)\n", cmd, array_item->valuestring);
                 array_item = cJSON_GetObjectItem(array_obj, "vport");
                 if (strncasecmp(array_item->valuestring, "any", strlen("any"))) {
                     policy_msg_data->vport = array_item->valueint;
@@ -622,7 +619,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                 } else if (0 == strncasecmp(array_item->valuestring, "udp", strlen("udp"))) {
                     policy_msg_data->proto = UDP_PROTOCOL;
                 } else {
-                    RTE_LOG(CRIT, QNSM, "%" PRIu64 " rcv dump cmd msg, invalid proto %s\n", time, array_item->valuestring);
+                    QNSM_LOG(CRIT, "rcv dump cmd msg, invalid proto %s\n", array_item->valuestring);
                     continue;
                 }
 
@@ -689,7 +686,7 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                     ret = -1;
                 }
                 if (0 >= ret) {
-                    RTE_LOG(CRIT, QNSM, "[ ERR ] vip address %s invalid\n", array_item->valuestring);
+                    QNSM_LOG(ERR, "vip address %s invalid\n", array_item->valuestring);
                     break;
                 }
             } else {
@@ -699,8 +696,8 @@ static void qnsm_master_kafka_cmd_msg_cons(char *payload, uint32_t payload_len)
                 break;
             }
 
-            RTE_LOG(CRIT, QNSM, "%" PRIu64 " rcv dpi policy cmd msg, (id:%u, ip:%s)\n",
-                    time, *(uint32_t *)(policy_msg_data + 1), array_item->valuestring);
+            QNSM_LOG(CRIT, "rcv dpi policy cmd msg, (id:%u, ip:%s)\n",
+                    *(uint32_t *)(policy_msg_data + 1), array_item->valuestring);
             array_item = cJSON_GetObjectItem(item, "sport");
             if (NULL == array_item->valuestring) {
                 policy_msg_data->sport = array_item->valueint;
@@ -827,7 +824,7 @@ int32_t qnsm_master_init(void)
     ret = rte_timer_reset(&master_data->syn_clock,
                           rte_get_timer_hz(), PERIODICAL,
                           rte_lcore_id(), qnsm_master_clock_syn_timer, NULL);
-    RTE_LOG(CRIT, USER1, "syn clock init %d\n", ret);
+    QNSM_LOG(CRIT, "syn clock init %d\n", ret);
 
 #ifdef __LEARN_SERVICE_VIP
     QNSM_BORDERM_CFG *bm_cfg = &qnsm_get_groups()->borderm_cfg;
