@@ -251,8 +251,6 @@ int32_t qnsm_match_all_net_segment(enum en_qnsm_ip_af af, QNSM_IN_ADDR *in_addr)
 */
 inline int32_t qnsm_match_service(void *data, uint16_t port);
 void *qnsm_get_kafka_cfg(const char *name);
-void qnsm_log_init(void);
-
 
 #ifdef __cplusplus
 }
