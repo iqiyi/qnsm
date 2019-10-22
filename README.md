@@ -56,6 +56,9 @@ IDPS模块基于[Suricata](https://github.com/OISF/suricata)，并新增了如�
 
 更多细节参考 [`GUIDE`](./doc/guide.md).
 
+## 外部会议介绍
+* QCon Shanghai 2019 [PPT](https://static001.geekbang.org/con/44/pdf/420097813/file/卢明樊.pdf  "爱奇艺网络流量安全检测能力建设实践")
+
 # 快速启动
 ## 测试环境
 测试环境如下：
