@@ -180,7 +180,7 @@ int32_t qnsm_master_redis_init(redisContext **pp_ctx, const char *addr, uint16_t
 
             /*auth*/
             while(NULL == (reply = redisCommand(c, cmd)));
-            QNSM_LOG(CRIT, "%llu redis connect success\n", jiffies());
+            QNSM_LOG(CRIT, "redis connect success\n");
             break;
         }
     }

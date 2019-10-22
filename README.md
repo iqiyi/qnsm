@@ -199,7 +199,7 @@ $ cat /var/qnsm/qnsm_edge.xml
 修改syslog配置，日志存储在/var/log/qnsm目录下。
 ```
 $ mkdir -p /var/log/qnsm
-$ echo "local5.*                                                /var/log/qnsm/qnsm.log" >> /etc/rsyslog.d/qnsm.conf
+$ cp -f conf/qnsm_syslog.conf /etc/rsyslog.d
 $ systemctl restart rsyslog.service
 $ cp -f conf/qnsm.logrotate /etc/logrotate.d
 $ logrotate /etc/logrotate.conf

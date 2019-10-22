@@ -896,7 +896,7 @@ redisContext* qnsm_cfg_init_redis_ctx(void)
 
             /*auth*/
             while(NULL == (reply = redisCommand(c, cmd)));
-            QNSM_LOG(INFO, "%llu redis connect success\n", jiffies());
+            QNSM_LOG(INFO, "redis connect success\n");
             break;
         }
     }
@@ -1442,7 +1442,7 @@ static void qnsm_init_log(void)
 
             if (facility == -1)
                 facility = LOG_LOCAL0;
-            openlog(NULL, LOG_NDELAY, facility);
+            openlog(NULL, LOG_PID | LOG_NDELAY, facility);
             QNSM_DEBUG(QNSM_DBG_M_CFG, QNSM_DBG_INFO,
                 "init syslog facility %d level %d", facility, cfg->log_level);
             break;
