@@ -242,7 +242,6 @@ static void qnsm_service_run(QNSM_DATA *data, struct app_pipeline_params *pipeli
     uint64_t                        msg_dispatch_deadline;
     uint64_t i = 0;
     QNSM_PORT_HANDLE *port_handle = qnsm_service_handle(EN_QNSM_SERVICE_PORT);
-    QNSM_TBL_HANDLE *tbl_handle = qnsm_service_handle(EN_QNSM_SERVICE_TBL);
     QNSM_ACL_HANDLE *acl_hdl = qnsm_service_handle(EN_QNSM_SERVICE_ACL);
 
     struct rte_mbuf **mbuf = NULL;
@@ -254,7 +253,6 @@ static void qnsm_service_run(QNSM_DATA *data, struct app_pipeline_params *pipeli
     QNSM_APP_RUN run = NULL;
     uint8_t load_acl = (en_lib_state_load == GET_LIB_COMMON_STATE(acl_hdl));
     uint8_t load_port = (en_lib_state_load == GET_LIB_COMMON_STATE(port_handle));
-    uint8_t load_tbl = (en_lib_state_load == GET_LIB_COMMON_STATE(tbl_handle));
 
     QNSM_CRM_AGENT *crm_agent = qnsm_service_handle(EN_QNSM_SERVICE_CRM);
     QNSM_MSG_DATA *msg_hdl = qnsm_service_handle(EN_QNSM_SERVICE_MSG);
@@ -314,9 +312,7 @@ static void qnsm_service_run(QNSM_DATA *data, struct app_pipeline_params *pipeli
             }
 
             /*timer*/
-            if (load_tbl) {
                 rte_timer_manage();
-            }
         }
 
         if(0 == (i & 0xF)) {
