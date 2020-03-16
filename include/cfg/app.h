@@ -573,7 +573,7 @@ do {                                    \
     char name[APP_PARAM_NAME_SIZE];                 \
     ssize_t pos;                            \
                                     \
-    sprintf(name, prefix "%" PRIu32, id);               \
+    snprintf(name, sizeof(name), prefix "%" PRIu32, id);               \
     pos = APP_PARAM_FIND(obj_array, name);              \
     obj = (pos < 0) ? NULL : &((obj_array)[pos]);           \
 } while (0)
@@ -1290,7 +1290,7 @@ app_get_link_for_rxq(struct app_params *app, struct app_pktq_hwq_in_params *p)
 
     sscanf(p->name, "RXQ%" SCNu32 ".%" SCNu32,
            &rxq_link_id, &rxq_queue_id);
-    sprintf(link_name, "LINK%" PRIu32, rxq_link_id);
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, rxq_link_id);
     link_param_idx = APP_PARAM_FIND(app->link_params, link_name);
     APP_CHECK((link_param_idx >= 0),
               "Cannot find %s for %s", link_name, p->name);
@@ -1307,7 +1307,7 @@ app_get_link_for_txq(struct app_params *app, struct app_pktq_hwq_out_params *p)
 
     sscanf(p->name, "TXQ%" SCNu32 ".%" SCNu32,
            &txq_link_id, &txq_queue_id);
-    sprintf(link_name, "LINK%" PRIu32, txq_link_id);
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, txq_link_id);
     link_param_idx = APP_PARAM_FIND(app->link_params, link_name);
     APP_CHECK((link_param_idx >= 0),
               "Cannot find %s for %s", link_name, p->name);
@@ -1323,7 +1323,7 @@ app_get_link_for_tm(struct app_params *app, struct app_pktq_tm_params *p_tm)
     ssize_t link_param_idx;
 
     sscanf(p_tm->name, "TM%" PRIu32, &link_id);
-    sprintf(link_name, "LINK%" PRIu32, link_id);
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);
     link_param_idx = APP_PARAM_FIND(app->link_params, link_name);
     APP_CHECK((link_param_idx >= 0),
               "Cannot find %s for %s", link_name, p_tm->name);
@@ -1339,7 +1339,7 @@ app_get_link_for_kni(struct app_params *app, struct app_pktq_kni_params *p_kni)
     ssize_t link_param_idx;
 
     sscanf(p_kni->name, "KNI%" PRIu32, &link_id);
-    sprintf(link_name, "LINK%" PRIu32, link_id);
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);
     link_param_idx = APP_PARAM_FIND(app->link_params, link_name);
     APP_CHECK((link_param_idx >= 0),
               "Cannot find %s for %s", link_name, p_kni->name);
