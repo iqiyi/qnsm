@@ -303,7 +303,7 @@ app_print_usage(char *prgname)
     uint32_t link_id, queue_id;             \
                                     \
     sscanf((rxq_name), "RXQ%" SCNu32 ".%" SCNu32, &link_id, &queue_id);\
-    sprintf(link_name, "LINK%" PRIu32, link_id);            \
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);            \
     link_param_pos = APP_PARAM_ADD((app)->link_params, link_name);  \
     link_param_pos;                         \
 })
@@ -315,7 +315,7 @@ app_print_usage(char *prgname)
     uint32_t link_id, queue_id;                 \
                                     \
     sscanf((txq_name), "TXQ%" SCNu32 ".%" SCNu32, &link_id, &queue_id);\
-    sprintf(link_name, "LINK%" PRIu32, link_id);            \
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);            \
     link_param_pos = APP_PARAM_ADD((app)->link_params, link_name);  \
     link_param_pos;                         \
 })
@@ -327,7 +327,7 @@ app_print_usage(char *prgname)
     uint32_t link_id;                       \
                                     \
     sscanf((tm_name), "TM%" SCNu32, &link_id);          \
-    sprintf(link_name, "LINK%" PRIu32, link_id);            \
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);            \
     link_param_pos = APP_PARAM_ADD((app)->link_params, link_name);  \
     link_param_pos;                         \
 })
@@ -339,7 +339,7 @@ app_print_usage(char *prgname)
     uint32_t link_id;                       \
                                     \
     sscanf((kni_name), "KNI%" SCNu32, &link_id);        \
-    sprintf(link_name, "LINK%" PRIu32, link_id);            \
+    snprintf(link_name, sizeof(link_name), "LINK%" PRIu32, link_id);            \
     link_param_pos = APP_PARAM_ADD((app)->link_params, link_name);  \
     link_param_pos;                         \
 })
@@ -3385,7 +3385,7 @@ filenamedup(const char *filename, const char *suffix)
     if (!s)
         return NULL;
 
-    sprintf(s, "%s%s", filename, suffix);
+    snprintf(s, sizeof(s), "%s%s", filename, suffix);
     return s;
 }
 
