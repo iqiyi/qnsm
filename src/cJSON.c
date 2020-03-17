@@ -243,7 +243,7 @@ static char *print_string_ptr(const char *str)
 				case '\n':	*ptr2++='n';	break;
 				case '\r':	*ptr2++='r';	break;
 				case '\t':	*ptr2++='t';	break;
-				default: snprintf(ptr2, sizeof(out)-(ptr2-out), "u%04x",token);ptr2+=5;	break;	/* escape and print */
+				default: snprintf(ptr2, (len+3)-(ptr2-out), "u%04x",token);ptr2+=5;	break;	/* escape and print */
 			}
 		}
 	}
