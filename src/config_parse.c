@@ -2561,8 +2561,10 @@ app_config_parse(struct app_params *app, const char *file_name)
     section_names = malloc(sect_count * sizeof(char *));
     PARSE_ERROR_MALLOC(section_names != NULL);
 
-    for (i = 0; i < sect_count; i++)
+    for (i = 0; i < sect_count; i++) {
         section_names[i] = malloc(CFG_NAME_LEN);
+        PARSE_ERROR_MALLOC(section_names[i] != NULL);
+    }
 
     rte_cfgfile_sections(cfg, section_names, sect_count);
 
