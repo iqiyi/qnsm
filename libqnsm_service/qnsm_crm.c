@@ -444,8 +444,8 @@ int32_t qnsm_crm_init(struct app_params *app, void **crm)
                                              app->pipeline_params[index].hyper_th_id);
         crm_hdl->msgq_id[lcore_id] = index;
 
-        crm_hdl->n_msgq = app->n_pipelines;
     }
+	crm_hdl->n_msgq = app->n_pipelines;
 
     memset(crm_hdl->cr_map, 0, sizeof(QNSM_CR) * APP_MAX_LCORES);
     for (index = 0; index < APP_MAX_LCORES; index++) {
