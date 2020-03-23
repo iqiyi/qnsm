@@ -129,7 +129,7 @@ check_links(struct app_params *app)
             char name[APP_PARAM_NAME_SIZE];
             int pos;
 
-            sprintf(name, "RXQ%" PRIu32 ".%" PRIu32,
+            snprintf(name, sizeof(name), "RXQ%" PRIu32 ".%" PRIu32,
                     link_id, i);
             pos = APP_PARAM_FIND(app->hwq_in_params, name);
             APP_CHECK((pos >= 0),
@@ -145,7 +145,7 @@ check_links(struct app_params *app)
             char name[APP_PARAM_NAME_SIZE];
             int pos;
 
-            sprintf(name, "TXQ%" PRIu32 ".%" PRIu32,
+            snprintf(name, sizeof(name), "TXQ%" PRIu32 ".%" PRIu32,
                     link_id, i);
             pos = APP_PARAM_FIND(app->hwq_out_params, name);
             APP_CHECK((pos >= 0),
