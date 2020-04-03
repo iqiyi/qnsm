@@ -503,7 +503,7 @@ int qnsm_decode_vlan(QNSM_PACKET_INFO *pkt_info, uint8_t *pkt, uint16_t len)
     uint32_t proto;
     const struct vlan_hdr *vh = (const struct vlan_hdr *)pkt;
 
-    proto = vh->eth_proto;
+    proto = (ntohs)(vh->eth_proto);
     switch (proto) {
         case ETHERNET_TYPE_IP:
             qnsm_decode_ipv4(pkt_info, pkt + sizeof(struct vlan_hdr),
@@ -525,7 +525,7 @@ int qnsm_decode_qinq(QNSM_PACKET_INFO *pkt_info, uint8_t *pkt, uint16_t len)
     uint32_t proto;
     const struct vlan_hdr *vh = (const struct vlan_hdr *)(pkt + sizeof(struct vlan_hdr));
 
-    proto = vh->eth_proto;
+    proto = (ntohs)(vh->eth_proto);
     switch (proto) {
         case ETHERNET_TYPE_IP:
             qnsm_decode_ipv4(pkt_info, pkt + sizeof(struct vlan_hdr) * 2,
