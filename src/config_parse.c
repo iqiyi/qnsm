@@ -3385,7 +3385,7 @@ filenamedup(const char *filename, const char *suffix)
     if (!s)
         return NULL;
 
-    snprintf(s, sizeof(s), "%s%s", filename, suffix);
+    sprintf(s, "%s%s", filename, suffix);
     return s;
 }
 
