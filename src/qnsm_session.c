@@ -1193,15 +1193,6 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     pkt_info = (QNSM_PACKET_INFO *)(mbuf + 1);
     data_len = rte_pktmbuf_pkt_len(mbuf);
 
-#ifdef __DDOS
-    if (qnsm_parse_ptype(mbuf))
-#else
-    if (qnsm_decode_ethernet(pkt_info, rte_pktmbuf_mtod(mbuf, uint8_t *), data_len))
-#endif
-    {
-        goto FREE;
-    }
-
     /*get mbuf private data*/
     pkt_info->lcore_id = lcore_id;
     pkt_info->dpi_app_prot = EN_QNSM_DPI_PROTO_MAX;
@@ -1212,11 +1203,14 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     uint8_t          direction = DIRECTION_MAX;
     uint8_t session_enable = 0;
 
-    if (1 != app_data->pkt_pass) {
-        app_data->pkt_pass--;
-    } else {
+    if (qnsm_parse_ptype(mbuf))
+    {
+        goto FREE;
+    }
+
+    if ((1 < app_data->flow_sample_rate) && 
+        (0 == (uint32_t)(((uint64_t)mbuf->hash.rss * app_data->flow_sample_rate) >> 32))) {
         session_enable = 1;
-        app_data->pkt_pass = app_data->pkt_sample_rate;
     }
 
     /*
@@ -1274,6 +1268,10 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     }
 
 #else
+    if (qnsm_decode_ethernet(pkt_info, rte_pktmbuf_mtod(mbuf, uint8_t *), data_len))
+    {
+        goto FREE;
+    }
 
     pos = mbuf->hash.rss;
     QNSM_SESS_INC_COUNTER(this_app_data, inner_pkt_counter);
@@ -1319,8 +1317,8 @@ void qnsm_sess_sample_init(QNSM_SESS_DATA *data)
 {
     QNSM_SESSM_CFG *sess_cfg = qnsm_get_sessm_conf();
 
-    data->pkt_sample_rate = 1;
-    data->flow_sample_rate = 1;
+    data->pkt_sample_rate = 1024;
+    data->flow_sample_rate = 1024;
     if (sess_cfg->sample_enable) {
         switch(sess_cfg->sample_method) {
             case EN_QNSM_PACKET_SAMPLE:
