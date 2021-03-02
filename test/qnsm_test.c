@@ -65,6 +65,7 @@
 #include "qnsm_inspect_main.h"
 
 #include "qnsm_cfg.h"
+#include "qnsm_decode.h"
 #include "qnsm_flow_analysis.h"
 #include "qnsm_dbg.h"
 #include "qnsm_service_ex.h"
@@ -325,6 +326,7 @@ int test_dpi(void *this)
     rte_memcpy(payload, http, sizeof(http));
 
     (void)qnsm_decode_ethernet(pkt_info, payload, sizeof(http));
+    sess.app_parse_info = NULL;
     if (EN_QNSM_DPI_HTTP != qnsm_dpi_match(pkt_info, EN_DPI_PROT_TCP, &sess, &app_arg))
     {
         return -1;
@@ -341,6 +343,98 @@ int test_dpi(void *this)
     return 0;
 }
 
+
+int test_dpi_http(void *this) {
+    QNSM_TEST_DATA *test_data = this;
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(test_data->pool);
+    QNSM_PACKET_INFO *pkt_info = (QNSM_PACKET_INFO *)(mbuf + 1);
+    char *payload = NULL;
+    static char header[] = {
+        0x94, 0x28, 0x2e, 0x59, 0x35, 0x70, 0xf4, 0x8e, 0x38, 0xa6, 0xdd, 0x02, 0x08, 0x00, 0x45, 0x00,
+        0x01, 0x30, 0x7e, 0x4b, 0x40, 0x00, 0x80, 0x06, 0xbe, 0xba, 0x0a, 0x05, 0x9b, 0x23, 0x97, 0x8b,
+        0x80, 0x0e, 0xf4, 0x96, 0x00, 0x50, 0xb0, 0x63, 0x99, 0x3c, 0x10, 0x2e, 0xfb, 0x14, 0x50, 0x18,
+        0x01, 0x00, 0xa1, 0x47, 0x00, 0x00      
+    };
+    static const char* http_payloads[] = {
+        "GET /videos/vts/20201201/1f/8c/",
+        "7e82a5317281ca5d0e6cfbfbdf3460e7.ts?",
+        "start=19058500&end=19475484&contentlength=416984&sd=1013054&qdv=1&qd_uid=0&qd_tvid=1285433600&qd_vip=0 HTTP/1.1\r\n",
+        "Host: pcw-data.video.iqiyi.com\r\n"        
+        "User-Agent: Mozilla/5.0 (Linux; U; Android 7.0; zh-CN; m3 note Build/NRD90M) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 Quark/4.6.6.164 Mobile Safari/537.36\r\n",
+        "\r\n"
+    };
+
+	static const char *resp_payload[] = {
+		"HTTP/1.1 200 OK\r\nServer: 1.14.3-2.el7.centos\r\nDate: Mon, 22 Feb 2021 08:34:12 GMT\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: 5\r\n\r\n",
+	    "{a:b}"
+	};
+    QNSM_SESS   sess;
+    void *app_arg = NULL;
+    int offset = sizeof(header);
+    int i = 0;
+    int ret = 0;
+
+    rte_pktmbuf_init(test_data->pool, NULL, mbuf, 0);
+    payload = rte_pktmbuf_mtod(mbuf, char *);
+    rte_memcpy(payload, header, offset);
+    rte_memcpy(payload + offset, http_payloads[0], strlen(http_payloads[0]));
+
+    sess.app_parse_info = NULL;
+    pkt_info->direction = DIRECTION_IN;
+
+    //set ip len
+    QNSM_DEBUG_ENABLE(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_ALL);
+    IPV4_SET_RAW_IPLEN((IPV4Hdr *)(payload + 14), htons(strlen(http_payloads[0]) + offset - 14));
+    (void)qnsm_decode_ethernet(pkt_info, payload, strlen(http_payloads[0]) + offset);
+    pkt_info->pkt_len = strlen(http_payloads[0]) + offset;
+    if (EN_QNSM_DPI_HTTP != qnsm_dpi_match(pkt_info, EN_DPI_PROT_TCP, &sess, &app_arg))
+    {
+        ret = -1;
+        goto EXIT;
+    }
+    qnsm_dpi_prot_cbk(EN_QNSM_DPI_HTTP, pkt_info, &sess, app_arg);
+    
+    for (i = 1; i < sizeof(http_payloads)/sizeof(char *); i++) {
+        rte_memcpy(payload, header, offset);
+        rte_memcpy(payload + offset, http_payloads[i], strlen(http_payloads[i]));
+        
+        IPV4_SET_RAW_IPLEN((IPV4Hdr *)(payload + 14), htons(strlen(http_payloads[i]) + offset - 14));
+        (void)qnsm_decode_ethernet(pkt_info, payload, strlen(http_payloads[i]) + offset);
+        pkt_info->pkt_len = strlen(http_payloads[i]) + offset;
+
+        qnsm_dpi_prot_cbk(EN_QNSM_DPI_HTTP, pkt_info, &sess, app_arg);
+    }
+	
+    pkt_info->direction = DIRECTION_OUT;
+    for (i = 0; i < sizeof(resp_payload)/sizeof(char *); i++) {
+        rte_memcpy(payload, header, offset);
+        rte_memcpy(payload + offset, resp_payload[i], strlen(resp_payload[i]));
+        
+        IPV4_SET_RAW_IPLEN((IPV4Hdr *)(payload + 14), htons(strlen(resp_payload[i]) + offset - 14));
+        (void)qnsm_decode_ethernet(pkt_info, payload, strlen(resp_payload[i]) + offset);
+        pkt_info->pkt_len = strlen(resp_payload[i]) + offset;
+
+        qnsm_dpi_prot_cbk(EN_QNSM_DPI_HTTP, pkt_info, &sess, app_arg);
+    }
+
+    //msg encap and decap test
+	char buf[1024];
+	int len = 0;
+	len = http_encap_info(buf, pkt_info, app_arg);
+	http_msg_proc(buf, len);
+	
+    EXIT:
+    if (app_arg)
+    {
+        qnsm_dpi_proto_free(EN_QNSM_DPI_HTTP, app_arg);
+    }
+    rte_pktmbuf_free(mbuf);
+
+    
+    QNSM_DEBUG_DISABLE(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_ALL);
+    return ret;
+}
+
 void qnsm_test_run(void *this)
 {
     int32_t status = 0;
@@ -350,6 +444,13 @@ void qnsm_test_run(void *this)
     if (status)
     {
         printf("\n\n\n\n************dpi tests failed %d************\n", status);
+    }
+    
+    printf("\n\n\n\n************http dpi tests************\n");
+    status = test_dpi_http(this);
+    if (status)
+    {
+        printf("\n\n\n\n************http dpi tests failed %d************\n", status);
     }
 
 	printf("\n\n\n\n************tbl tests************\n");

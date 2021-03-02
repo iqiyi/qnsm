@@ -305,14 +305,13 @@ int32_t tcp_conn_proc(QNSM_PACKET_INFO* pkt_info, void *sess, uint32_t *tcp_seq)
     QNSM_SESS_DATA *sess_data = qnsm_app_data(EN_QNSM_SESSM);
     TCP_CACHE *cache = &sess_data->tcp_data;
     QNSM_SESS *session = sess;
+    uint8_t dir = (pkt_info->flowflags & EN_TO_SERVER) ? 0 : 1;
 
     QNSM_DEBUG(QNSM_DBG_M_TCP, QNSM_DBG_INFO, "enter seq %u ack %u\n", seq, recv_ack);
     tcp_conn = session->tcp_stream;
     if (NULL == tcp_conn) {
         if ((this_tcphdr->tcp_flags & TH_SYN) &&
-            !(this_tcphdr->tcp_flags & TH_ACK) &&
-            !(this_tcphdr->tcp_flags & TH_RST) &&
-            !(this_tcphdr->tcp_flags & TH_FIN)) {
+            !(this_tcphdr->tcp_flags & (TH_ACK | TH_RST | TH_FIN))) {
             /*now only recvd syn pkt, create tcp conn.
             * whether need consider this situation,
             * if syn missed, but rcvd syn+ack pkt
@@ -359,7 +358,7 @@ int32_t tcp_conn_proc(QNSM_PACKET_INFO* pkt_info, void *sess, uint32_t *tcp_seq)
             tcp_conn->active.seq = seq + 1;
 
             /*set seq*/
-            tcp_seq[pkt_info->sess_dir % 2] =  tcp_conn->active.seq;
+            tcp_seq[dir] =  tcp_conn->active.seq;
             ret = 1;
         } else {
             QNSM_DEBUG(QNSM_DBG_M_TCP, QNSM_DBG_INFO, "not match sess tcp_flag %x\n", this_tcphdr->tcp_flags);
@@ -411,7 +410,7 @@ int32_t tcp_conn_proc(QNSM_PACKET_INFO* pkt_info, void *sess, uint32_t *tcp_seq)
 #if 0
         tcp_seq[(pkt_info->sess_dir + 1) % 2] =  recv_ack;
 #else
-        tcp_seq[pkt_info->sess_dir % 2] = tcp_conn->passive.seq;
+        tcp_seq[dir] = tcp_conn->passive.seq;
 #endif
         ret = 1;
         goto EXIT;
@@ -427,7 +426,7 @@ int32_t tcp_conn_proc(QNSM_PACKET_INFO* pkt_info, void *sess, uint32_t *tcp_seq)
         /*
         *rst flood isnpect, need check seq
         */
-        if (packet_sequence_diff(seq, tcp_seq[pkt_info->sess_dir]) < 0) {
+        if (packet_sequence_diff(seq, tcp_seq[dir]) < 0) {
             ret = -1;
             goto EXIT;
         }

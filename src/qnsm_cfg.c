@@ -1603,7 +1603,7 @@ int qnsm_conf_parse(void)
     }
 
     qnsm_vip_conf_init();
-    if (app_type_find(app_paras, EN_QNSM_VIP_AGG)) {
+    if (app_type_find(app_paras, EN_QNSM_VIP_AGG) || app_type_find(app_paras, EN_QNSM_TEST)) {
         /*vip conf parse */
         (void)snprintf(path, sizeof(path), "%s/qnsm_vip.xml", app_paras->xml_conf_dir);
         ret = qnsm_vip_conf_parse(path);
@@ -1615,7 +1615,7 @@ int qnsm_conf_parse(void)
 
     /*edge conf parse*/
     (void)qnsm_edge_conf_init();
-    if (app_type_find(app_paras, EN_QNSM_EDGE)) {
+    if (app_type_find(app_paras, EN_QNSM_EDGE) || app_type_find(app_paras, EN_QNSM_TEST)) {
         (void)snprintf(path, sizeof(path), "%s/qnsm_edge.xml", app_paras->xml_conf_dir);
         ret = qnsm_edge_conf_parse(path);
         if(ret != 0) {
@@ -1627,7 +1627,7 @@ int qnsm_conf_parse(void)
 
     /*sessm conf*/
     (void)qnsm_sessm_conf_init();
-    if (app_type_find(app_paras, EN_QNSM_SESSM)) {
+    if (app_type_find(app_paras, EN_QNSM_SESSM) || app_type_find(app_paras, EN_QNSM_TEST)) {
 
         (void)snprintf(path, sizeof(path), "%s/qnsm_sessm.xml", app_paras->xml_conf_dir);
         ret = qnsm_sessm_conf_parse(path);

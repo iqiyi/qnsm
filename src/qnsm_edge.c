@@ -442,11 +442,17 @@ static int32_t qnsm_5tuple_msg_proc(void *data, uint32_t data_len)
         cJSON_AddNumberToObject(root, "timestamp", sess_msg->time_old);
         cJSON_AddNumberToObject(root, "ip_protocol", sess_msg->protocol);
         cJSON_AddNumberToObject(root, "ip_version", ip_ver);
-        cJSON_AddStringToObject(root,"src_ip", src_tmp);
-        cJSON_AddNumberToObject(root, "src_port", port[0]);
-        cJSON_AddStringToObject(root,"dst_ip", dst_tmp);
-        cJSON_AddNumberToObject(root, "dst_port", port[1]);
-
+        if (0 == sess_msg->vip_is_src) {
+            cJSON_AddStringToObject(root,"src_ip", src_tmp);
+            cJSON_AddNumberToObject(root, "src_port", port[0]);
+            cJSON_AddStringToObject(root,"dst_ip", dst_tmp);
+            cJSON_AddNumberToObject(root, "dst_port", port[1]);
+        } else {
+            cJSON_AddStringToObject(root,"src_ip", dst_tmp);
+            cJSON_AddNumberToObject(root, "src_port", port[1]);
+            cJSON_AddStringToObject(root,"dst_ip", src_tmp);
+            cJSON_AddNumberToObject(root, "dst_port", port[0]);
+        }
         cJSON_AddNumberToObject(root, "direction", 0);
         cJSON_AddNumberToObject(root, "tcp_flags", sess_msg->tcp_flags[DIRECTION_IN]);
         cJSON_AddNumberToObject(root, "icmp_type", sess_msg->icmp_type[DIRECTION_IN]);
@@ -466,11 +472,17 @@ static int32_t qnsm_5tuple_msg_proc(void *data, uint32_t data_len)
         cJSON_AddNumberToObject(root, "timestamp", sess_msg->time_old);
         cJSON_AddNumberToObject(root, "ip_protocol", sess_msg->protocol);
         cJSON_AddNumberToObject(root, "ip_version", ip_ver);
-        cJSON_AddStringToObject(root,"src_ip", src_tmp);
-        cJSON_AddNumberToObject(root, "src_port", port[0]);
-        cJSON_AddStringToObject(root,"dst_ip", dst_tmp);
-        cJSON_AddNumberToObject(root, "dst_port", port[1]);
-
+        if (sess_msg->vip_is_src) {
+            cJSON_AddStringToObject(root,"src_ip", src_tmp);
+            cJSON_AddNumberToObject(root, "src_port", port[0]);
+            cJSON_AddStringToObject(root,"dst_ip", dst_tmp);
+            cJSON_AddNumberToObject(root, "dst_port", port[1]);
+        } else {
+            cJSON_AddStringToObject(root,"src_ip", dst_tmp);
+            cJSON_AddNumberToObject(root, "src_port", port[1]);
+            cJSON_AddStringToObject(root,"dst_ip", src_tmp);
+            cJSON_AddNumberToObject(root, "dst_port", port[0]);
+        }
         cJSON_AddNumberToObject(root, "direction", 1);
         cJSON_AddNumberToObject(root, "tcp_flags", sess_msg->tcp_flags[DIRECTION_OUT]);
         cJSON_AddNumberToObject(root, "icmp_type", sess_msg->icmp_type[DIRECTION_OUT]);

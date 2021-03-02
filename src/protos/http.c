@@ -135,20 +135,11 @@ void http_classify(QNSM_PACKET_INFO *pkt_info, void *sess, void **arg)
     HTTP_INFO *http_info = NULL;
     HTTP_PARSER_INFO *parse_info = NULL;
     QNSM_SESS *tcp_sess = sess;
-    uint16_t direction;
-    uint16_t total_hdr_len = 0;
-    struct rte_mbuf *mbuf = (struct rte_mbuf *)((char *)pkt_info - sizeof(struct rte_mbuf));
 
     QNSM_ASSERT(NULL != pkt_info);
     QNSM_ASSERT(NULL != arg);
 
     QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "enter\n");
-
-    direction = pkt_info->sess_dir;
-    if (EN_QNSM_SESS_DIR_MAX <= direction) {
-        QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_WARN, "direction exceed!!\n");
-        return;
-    }
 
     if (tcp_sess) {
         if (tcp_sess->app_parse_info) {
@@ -167,47 +158,45 @@ void http_classify(QNSM_PACKET_INFO *pkt_info, void *sess, void **arg)
             *arg = NULL;
             return;
         }
+        http_info->encap_data = NULL;
+        http_info->data_len = 0;
+        http_info->body_len = 0;
+        http_info->body_start = NULL;
+        http_info->num_body_segs = 0;   
+
+        /*
         parse_info = http_info->parser_info;
         parse_info[DIRECTION_IN].parse_state = HTTP_PARSE_INIT;
         parse_info[DIRECTION_OUT].parse_state = HTTP_PARSE_INIT;
         parse_info[DIRECTION_IN].same_state_cnt = 0;
         parse_info[DIRECTION_OUT].same_state_cnt = 0;
-        parse_info[DIRECTION_IN].encap_data = NULL;
-        parse_info[DIRECTION_OUT].encap_data = NULL;
+        */
+        /*init method for diff req/resp*/
+        /*
+        parse_info[DIRECTION_IN].parser.method = HTTP_INIT;
+        parse_info[DIRECTION_OUT].parser.method = HTTP_INIT;        
+        */
         if (tcp_sess) {
             tcp_sess->app_parse_info = http_info;
         }
 
-        /*init method for diff req/resp*/
-        parse_info[DIRECTION_IN].parser.method = HTTP_INIT;
-        parse_info[DIRECTION_OUT].parser.method = HTTP_INIT;
     }
 
-    /*http info init*/
-    http_info->http_hdr = (uint8_t *)pkt_info->payload;
-    http_info->direction = direction;
+    /*first pkt dir as svr dir*/
+    http_info->direction = pkt_info->direction;
 
-    /*parser info init*/
-    parse_info = &http_info->parser_info[direction];
-    parse_info->parser.data = parse_info;
-    total_hdr_len = pkt_info->payload - rte_pktmbuf_mtod(mbuf, char *);
-    parse_info->hp_length = pkt_info->pkt_len - total_hdr_len;
-    parse_info->pkt_info = pkt_info;
-
-    if (HTTP_PARSE_FIN == parse_info->parse_state) {
+    /*parse info init*/
+    int dir = 0;
+    for (; dir < DIRECTION_MAX; dir++) {
+        parse_info = &http_info->parser_info[dir];
+        parse_info->parser.data = parse_info;
         parse_info->parse_state = HTTP_PARSE_INIT;
-    }
-    if (HTTP_PARSE_INIT == parse_info->parse_state) {
-        /*first seg init*/
-        parse_info->body_len = 0;
-        parse_info->body_start = NULL;
-        parse_info->seg_info.num_hdr_segs = 0;
-        parse_info->seg_info.num_body_segs = 0;
-
-
+        parse_info->same_state_cnt = 0;
+        //parse_info->parser.method = HTTP_INIT;
+        parse_info->http_info = http_info;
         http_parser_init(&parse_info->parser, HTTP_BOTH);
     }
-
+    
     *arg = http_info;
     QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "leave\n");
 
@@ -222,7 +211,9 @@ EN_QNSM_DPI_OP_RES http_parse(QNSM_PACKET_INFO *pkt_info, void *arg)
     uint32_t remaining = 0;
     http_parser *parser = NULL;
     HTTP_PARSER_INFO *parser_info = NULL;
-    enum en_http_parse_state prev_parse_state = 0;
+    enum en_http_parse_state prev_parse_state = 0;  
+    struct rte_mbuf *mbuf = (struct rte_mbuf *)((char *)pkt_info - sizeof(struct rte_mbuf));
+    uint16_t total_hdr_len = 0;
 
     QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "enter\n");
 
@@ -231,8 +222,12 @@ EN_QNSM_DPI_OP_RES http_parse(QNSM_PACKET_INFO *pkt_info, void *arg)
         return EN_QNSM_DPI_OP_STOP;
     }
 
-    data = (char *)http_info->http_hdr;
-    parser_info = &http_info->parser_info[http_info->direction];
+    data = (char *)pkt_info->payload;
+    parser_info = &http_info->parser_info[pkt_info->direction];
+    total_hdr_len = pkt_info->payload - rte_pktmbuf_mtod(mbuf, char *);
+    parser_info->hp_length = pkt_info->pkt_len - total_hdr_len;
+    parser_info->pkt_info = pkt_info;
+    
     prev_parse_state = parser_info->parse_state;
     remaining = parser_info->hp_length;
     parser = &parser_info->parser;
@@ -248,11 +243,14 @@ EN_QNSM_DPI_OP_RES http_parse(QNSM_PACKET_INFO *pkt_info, void *arg)
              *now not inform,
              */
             ret = EN_QNSM_DPI_OP_STOP;
-            QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_ERR, "parse result: %d input: %d errno: %d state %d\n", len, remaining, parser->http_errno, parser->state);
+            QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_ERR, "parse result: %d input: %d err desc: %s state %d\n", 
+                len, remaining, http_errno_description(parser->http_errno), parser->state);
+            
             break;
         }
 
-        QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "parse result: %d input: %d errno: %d state %d\n", len, remaining, parser->http_errno, parser->state);
+        QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "parse result: %d input: %d errno: %d state %d\n", 
+            len, remaining, parser->http_errno, parser->state);
 
         data += len;
         remaining -= len;
@@ -264,20 +262,18 @@ EN_QNSM_DPI_OP_RES http_parse(QNSM_PACKET_INFO *pkt_info, void *arg)
         }
 
 #if __MIRR_MODE_BOTH
-        /*http req, not send data, wait reponse*/
-        if ((HTTP_NOTREQ == parser->method) &&
-            (HTTP_PARSE_FIN == parser_info->parse_state)) {
+        if (s_start_res == parser->state) {
             ret = EN_QNSM_DPI_OP_CONTINUE;
             break;
         }
 #else
-        if (HTTP_PARSE_FIN == parser_info->parse_state) {
+        if ((s_start_req == parser->state) || (s_start_res == parser->state)) {
             ret = EN_QNSM_DPI_OP_CONTINUE;
             break;
         }
 #endif
         else {
-            if ((HTTP_NOTREQ <= parser->method) || (5 > parser_info->same_state_cnt)) {
+            if (5 > parser_info->same_state_cnt) {
                 ret = EN_QNSM_DPI_OP_STOP;
             } else {
                 /*for slowloris, slowpost*/
@@ -290,15 +286,7 @@ EN_QNSM_DPI_OP_RES http_parse(QNSM_PACKET_INFO *pkt_info, void *arg)
         }
     }
 
-    /*
-     *current seg parse finish,
-     *according by parse state
-     */
-    if (HTTP_PARSE_HEADER_COMPLETE >= parser_info->parse_state) {
-        parser_info->seg_info.num_hdr_segs++;
-    }
-
-    QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "leave\n");
+    QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "leave ret %u\n", ret);
     return ret;
 }
 
@@ -309,6 +297,7 @@ uint32_t http_encap_req(uint8_t *buf, uint16_t offset, HTTP_PARSER_INFO *parser_
     http_parser *parser = NULL;
     HTTP_MSG_HEADER *header = (HTTP_MSG_HEADER *)tmp_buf;
 
+    /* type 0, req */
     header->type = 0;
     if (NULL == parser_info) {
         header->len = 0;
@@ -318,19 +307,19 @@ uint32_t http_encap_req(uint8_t *buf, uint16_t offset, HTTP_PARSER_INFO *parser_
     /*HPE_OK is zero,
     *if parse err, this field is > 0*/
     parser = &parser_info->parser;
-    *(uint32_t *)(tmp_buf + len) = parser->http_errno;
-    len += sizeof(uint32_t);
+    *(uint16_t *)(tmp_buf + len) = parser->http_errno;
+    len += sizeof(uint16_t);
 
-    *(uint32_t *)(tmp_buf + len) = parser_info->hp_length;
-    len += sizeof(uint32_t);
+    *(uint16_t *)(tmp_buf + len) = parser_info->hp_length;
+    len += sizeof(uint16_t);
 
     if (HPE_OK != parser->http_errno) {
         header->len = len - sizeof(HTTP_MSG_HEADER);
         return len;
     }
 
-    *(uint32_t *)(tmp_buf + len) = parser->method;
-    len += sizeof(uint32_t);
+    *(uint16_t *)(tmp_buf + len) = parser->method;
+    len += sizeof(uint16_t);
     header->len = len - sizeof(HTTP_MSG_HEADER);
 
     /*add feature for slowloris/slowpost*/
@@ -339,12 +328,6 @@ uint32_t http_encap_req(uint8_t *buf, uint16_t offset, HTTP_PARSER_INFO *parser_
     *(uint8_t *)(tmp_buf + len) = parser_info->parse_state;
     len += sizeof(uint8_t);
 
-    QNSM_ASSERT(HTTP_RESERVED_LEN >= (offset + len));
-    if ((NULL != parser_info->encap_data) &&
-        (HTTP_RESERVED_LEN <= parser_info->data_len)) {
-        rte_memcpy(buf + HTTP_RESERVED_LEN, parser_info->encap_data + HTTP_RESERVED_LEN, parser_info->data_len - HTTP_RESERVED_LEN);
-        len = parser_info->data_len - offset;
-    }
     return len;
 }
 
@@ -355,6 +338,7 @@ uint32_t http_encap_resp(uint8_t *buf, uint16_t offset, HTTP_PARSER_INFO *parser
     http_parser *parser = NULL;
     HTTP_MSG_HEADER *header = (HTTP_MSG_HEADER *)tmp_buf;
 
+    /* type 1, rsp */
     header->type = 1;
     if (NULL == parser_info) {
         header->len = 0;
@@ -362,8 +346,8 @@ uint32_t http_encap_resp(uint8_t *buf, uint16_t offset, HTTP_PARSER_INFO *parser
     }
 
     parser = &parser_info->parser;
-    *(uint32_t *)(tmp_buf + len) = parser->http_errno;
-    len += sizeof(uint32_t);
+    *(uint16_t *)(tmp_buf + len) = parser->http_errno;
+    len += sizeof(uint16_t);
     *(uint16_t *)(tmp_buf + len) = parser_info->hp_length;
     len += sizeof(uint16_t);
     *(uint16_t *)(tmp_buf + len) = parser->status_code;
@@ -383,37 +367,37 @@ uint32_t http_encap_info(uint8_t *buf, void *pkt_info, void *arg)
 
     HTTP_PARSER_INFO *parser_info_req = NULL;
     HTTP_PARSER_INFO *parser_info_resp = NULL;
-    HTTP_PARSER_INFO *cur_parser_info = &http_info->parser_info[http_info->direction];
+    HTTP_PARSER_INFO *svr_parser_info = &http_info->parser_info[http_info->direction];
+    QNSM_PACKET_INFO *svr_pkt_info = (NULL != svr_parser_info->pkt_info) ? svr_parser_info->pkt_info : pkt_info;
     uint8_t dir = 0;
-    //QNSM_PACKET_INFO tmp_pkt_info;
-    QNSM_PACKET_INFO *cur_pkt_info = pkt_info;
 
     for (dir = 0; dir < DIRECTION_MAX; dir++) {
-        if (HTTP_NOTREQ <= http_info->parser_info[dir].parser.method) {
+        if (0 == http_info->parser_info[dir].parser.method) {
             parser_info_resp = &http_info->parser_info[dir];
         }
-        if (HTTP_NOTREQ > http_info->parser_info[dir].parser.method) {
+        if (0 != http_info->parser_info[dir].parser.method) {
             parser_info_req = &http_info->parser_info[dir];
         }
     }
 
-    if ((HTTP_NOTREQ <= cur_parser_info->parser.method) &&
-        (HPE_OK == cur_parser_info->parser.http_errno)) {
-#if 0
-        tmp_pkt_info.src_ip = cur_pkt_info->dst_ip;
-        tmp_pkt_info.sport = cur_pkt_info->dport;
-        tmp_pkt_info.dst_ip= cur_pkt_info->src_ip;
-        tmp_pkt_info.dport = cur_pkt_info->sport;
-        cur_pkt_info = &tmp_pkt_info;
-#endif
-    } else {
+    if (parser_info_resp && (HPE_OK !=parser_info_resp->parser.http_errno)) {
         parser_info_resp = NULL;
     }
 
-    len += qnsm_dpi_encap_tuple(buf, cur_pkt_info);
+    len += qnsm_dpi_encap_tuple(buf, svr_pkt_info);
 
     len += http_encap_resp(buf, len, parser_info_resp);
     len += http_encap_req(buf, len, parser_info_req);
+    
+    QNSM_ASSERT(HTTP_RESERVED_LEN >= len);
+    if (NULL == http_info) {
+        return len;
+    }
+    if ((NULL != http_info->encap_data) &&
+        (HTTP_RESERVED_LEN <= http_info->data_len)) {
+        rte_memcpy(buf + HTTP_RESERVED_LEN, http_info->encap_data + HTTP_RESERVED_LEN, http_info->data_len - HTTP_RESERVED_LEN);
+        len = http_info->data_len;
+    }
     return len;
 }
 
@@ -436,7 +420,7 @@ void http_msg_proc(void *data, uint32_t data_len)
     char  tmp[128];
     uint32_t size =  sizeof(tmp);
     struct in_addr ip_addr;
-    uint8_t  method = 0;
+    uint8_t  method = HTTP_INIT;
     uint16_t http_code;
     uint32_t len = 0;
     uint8_t *buf = data;
@@ -480,8 +464,8 @@ void http_msg_proc(void *data, uint32_t data_len)
     if ((len < data_len) && (1 == header->type)) {
         len += sizeof(HTTP_MSG_HEADER);
         if (header->len > 0) {
-            resp_err = *(uint32_t *)(buf + len);
-            len += sizeof(uint32_t);
+            resp_err = *(uint16_t *)(buf + len);
+            len += sizeof(uint16_t);
             resp_len = *(uint16_t *)(buf + len);
             len += sizeof(uint16_t);
             http_code = *(uint16_t *)(buf + len);
@@ -495,23 +479,23 @@ void http_msg_proc(void *data, uint32_t data_len)
         len += sizeof(HTTP_MSG_HEADER);
 
         if (header->len > 0) {
-            http_errno = *(uint32_t *)(buf + len);
+            http_errno = *(uint16_t *)(buf + len);
             cJSON_AddNumberToObject(root, "parse_err", http_errno);
-            len += sizeof(uint32_t);
+            len += sizeof(uint16_t);
 
-            hp_len = *(uint32_t *)(buf + len);
+            hp_len = *(uint16_t *)(buf + len);
             cJSON_AddNumberToObject(root, "http_len", hp_len);
-            len += sizeof(uint32_t);
+            len += sizeof(uint16_t);
 
             if (http_errno > HPE_OK) {
                 goto EXIT;
             }
 
-            method = *(uint32_t *)(buf + len);
-            if (HTTP_NOTREQ > method) {
+            method = *(uint16_t *)(buf + len);
+            if (HTTP_INIT != method) {
                 cJSON_AddStringToObject(root, "method", http_method_strings[method]);
             }
-            len += sizeof(uint32_t);
+            len += sizeof(uint16_t);
 
             /*feature for slowloris/slowpost*/
             same_state_cnt = *(uint8_t *)(buf + len);
@@ -570,7 +554,7 @@ uint32_t http_encap_info(uint8_t *buf, void *pkt_info, void *arg)
 
     len += qnsm_dpi_encap_tuple(buf, pkt_info);
 
-    if (HTTP_NOTREQ > parser->method) {
+    if (0 != parser->method) {
         len += http_encap_req(buf, len, parser_info);
     } else {
         len += http_encap_resp(buf, len, parser_info);
@@ -595,7 +579,7 @@ void http_msg_proc(void *data, uint32_t data_len)
     char  tmp[128];
     uint32_t size =  sizeof(tmp);
     struct in_addr ip_addr;
-    uint8_t  method;
+    uint8_t  method = HTTP_INIT;
     uint16_t http_code;
     uint32_t len = 0;
     uint8_t *buf = data;
@@ -639,8 +623,8 @@ void http_msg_proc(void *data, uint32_t data_len)
         len += sizeof(HTTP_MSG_HEADER);
         if (header->len  > 0) {
             if (1 == header->type) {
-                resp_err = *(uint32_t *)(buf + len);
-                len += sizeof(uint32_t);
+                resp_err = *(uint16_t *)(buf + len);
+                len += sizeof(uint16_t);
                 resp_len = *(uint16_t *)(buf + len);
                 len += sizeof(uint16_t);
                 http_code = *(uint16_t *)(buf + len);
@@ -650,23 +634,23 @@ void http_msg_proc(void *data, uint32_t data_len)
                 cJSON_AddNumberToObject(root, "resp_http_len", resp_len);
                 cJSON_AddNumberToObject(root, "resp_http_code", http_code);
             } else {
-                http_errno = *(uint32_t *)(buf + len);
+                http_errno = *(uint16_t *)(buf + len);
                 cJSON_AddNumberToObject(root, "parse_err", http_errno);
-                len += sizeof(uint32_t);
+                len += sizeof(uint16_t);
 
-                hp_len = *(uint32_t *)(buf + len);
+                hp_len = *(uint16_t *)(buf + len);
                 cJSON_AddNumberToObject(root, "http_len", hp_len);
-                len += sizeof(uint32_t);
+                len += sizeof(uint16_t);
 
                 if (http_errno > HPE_OK) {
                     goto EXIT;
                 }
 
-                method = *(uint32_t *)(buf + len);
-                if (HTTP_NOTREQ > method) {
+                method = *(uint16_t *)(buf + len);
+                if (HTTP_INIT != method) {
                     cJSON_AddStringToObject(root, "method", http_method_strings[method]);
                 }
-                len += sizeof(uint32_t);
+                len += sizeof(uint16_t);
 
                 /*feature for slowloris/slowpost*/
                 same_state_cnt = *(uint8_t *)(buf + len);
@@ -704,7 +688,7 @@ EXIT:
 
     if(root)
         cJSON_Delete(root);
-    QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "leave method %s\n", http_method_strings[method]);
+    QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "leave\n");
     return;
 }
 
@@ -714,14 +698,14 @@ EXIT:
 int  http_on_message_begin(http_parser* parser)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
+    HTTP_INFO *http_info = parser_info->http_info;
     HTTP_DATA *http_data = qnsm_dpi_proto_data(EN_QNSM_DPI_HTTP);
     struct rte_mempool *http_data_cache = http_data->encap_data_cache;
 
     QNSM_ASSERT(http_data_cache);
 
-    /*req*/
-    if (HTTP_NOTREQ > parser->method) {
-        if ((NULL == parser_info->encap_data) && rte_mempool_get(http_data_cache, (void **)&parser_info->encap_data)) {
+    if (NULL == http_info->encap_data) {
+        if (rte_mempool_get(http_data_cache, (void **)&http_info->encap_data)) {
             QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_ERR, "failed\n");
 
             /*
@@ -730,8 +714,8 @@ int  http_on_message_begin(http_parser* parser)
             */
             return -1;
         }
-        parser_info->data_len = HTTP_RESERVED_LEN;
-        QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "set req rsvd data len\n");
+        http_info->data_len = HTTP_RESERVED_LEN;
+        QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "allocate encap data, set rsvd data len\n");
     }
     return 0;
 }
@@ -739,11 +723,18 @@ int  http_on_message_begin(http_parser* parser)
 int http_on_url(http_parser *parser, const char *at, size_t length)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
-    uint32_t len = parser_info->data_len;
-    uint8_t *buf = parser_info->encap_data;
+    HTTP_INFO *http_info = parser_info->http_info;
+    uint32_t len = NULL;
+    uint8_t *buf = 0;
 
-    /*skip response*/
-    if ((NULL == buf) || (HTTP_NOTREQ <= parser->method)) {
+    if (NULL == http_info) {
+        return 0;
+    }
+
+    buf = http_info->encap_data;
+    len = http_info->data_len;
+    
+    if (NULL == buf) {
         return 0;
     }
 
@@ -766,7 +757,7 @@ int http_on_url(http_parser *parser, const char *at, size_t length)
         len += field_len;
         buf[len - 1] = '\0';
 
-        parser_info->data_len = len;
+        http_info->data_len = len;
     }
 
     return 0;
@@ -775,12 +766,19 @@ int http_on_url(http_parser *parser, const char *at, size_t length)
 int http_on_header_field(http_parser *parser, const char *at, size_t length)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
-    uint8_t *buf = parser_info->encap_data;
-    uint32_t len = parser_info->data_len;
+    HTTP_INFO *http_info = parser_info->http_info;
+    uint8_t *buf = NULL;
+    uint32_t len = 0;
     uint32_t   name_len = length + 1;
 
-    /*skip response*/
-    if ((NULL == buf) || (HTTP_NOTREQ <= parser->method)) {
+    if (NULL == http_info) {
+        return 0;
+    }
+
+    buf = http_info->encap_data;
+    len = http_info->data_len;
+    
+    if (NULL == buf) {
         return 0;
     }
 
@@ -795,7 +793,7 @@ int http_on_header_field(http_parser *parser, const char *at, size_t length)
         len += name_len;
         buf[len - 1] = '\0';
 
-        parser_info->data_len = len;
+        http_info->data_len = len;
     }
     return 0;
 }
@@ -803,12 +801,19 @@ int http_on_header_field(http_parser *parser, const char *at, size_t length)
 int http_on_header_value(http_parser *parser, const char *at, size_t length)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
-    uint8_t *buf = parser_info->encap_data;
-    uint32_t len = parser_info->data_len;
+    HTTP_INFO *http_info = parser_info->http_info;
+    uint8_t *buf = NULL;
+    uint32_t len = 0;
     uint32_t   field_len = length + 1;
 
-    /*skip response*/
-    if ((NULL == buf) || (HTTP_NOTREQ <= parser->method)) {
+    if (NULL == http_info) {
+        return 0;
+    }
+
+    buf = http_info->encap_data;
+    len = http_info->data_len;
+
+    if (NULL == buf) {
         return 0;
     }
 
@@ -820,7 +825,7 @@ int http_on_header_value(http_parser *parser, const char *at, size_t length)
         len += field_len;
         buf[len - 1] = '\0';
 
-        parser_info->data_len = len;
+        http_info->data_len = len;
     }
     return 0;
 }
@@ -836,15 +841,17 @@ int  http_on_headers_complete(http_parser* parser)
 int http_on_body(http_parser *parser, const char *at, size_t length)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
+    HTTP_INFO *http_info = parser_info->http_info;
     uint8_t body_name_len = 0;
-    uint8_t *buf = parser_info->encap_data;
-    uint32_t offset = parser_info->data_len;
+    uint8_t *buf = NULL;
+    uint32_t offset = 0;
 
-    /*skip response*/
-    if ((NULL == buf) || (HTTP_NOTREQ <= parser->method)) {
+    if (NULL == http_info) {
         return 0;
     }
 
+    buf = http_info->encap_data;
+    offset = http_info->data_len;
     parser_info->parse_state = HTTP_PARSE_BODY;
 
     /*encap body
@@ -854,8 +861,11 @@ int http_on_body(http_parser *parser, const char *at, size_t length)
     * |lenof(body data)|
     * |body data|
     */
-    if (HTTP_BODY_SEGS_MAX > parser_info->seg_info.num_body_segs) {
-        if (0 == parser_info->seg_info.num_body_segs) {
+    if (NULL == buf) {
+        return 0;
+    }
+    if (HTTP_BODY_SEGS_MAX > http_info->num_body_segs) {
+        if (0 == http_info->num_body_segs) {
             body_name_len = strlen("BODY") + 1;
             if ((offset + sizeof(uint32_t) + body_name_len) <= QNSM_DPI_MSG_DATA_LEN) {
                 *(uint32_t *)(buf + offset) = body_name_len;
@@ -863,10 +873,10 @@ int http_on_body(http_parser *parser, const char *at, size_t length)
                 rte_memcpy(buf + offset, "BODY", body_name_len - 1);
                 offset += body_name_len;
                 buf[offset -1] = '\0';
-                parser_info->data_len = offset;
+                http_info->data_len = offset;
 
                 /*body data*/
-                parser_info->body_start = parser_info->encap_data + offset;
+                http_info->body_start = http_info->encap_data + offset;
                 offset += sizeof(uint32_t);
             } else {
                 /*parse body err because not enough buf space*/
@@ -876,19 +886,19 @@ int http_on_body(http_parser *parser, const char *at, size_t length)
         }
 
         if ((offset + length + 1) <= QNSM_DPI_MSG_DATA_LEN) {
-            parser_info->body_len += length;
+            http_info->body_len += length;
 
             /*update body total len assumed end with '\0'*/
-            *(uint32_t *)(parser_info->body_start) = parser_info->body_len + 1;
+            *(uint32_t *)(http_info->body_start) = http_info->body_len + 1;
 
             /*fill seg body data*/
             rte_memcpy(buf + offset, at, length);
             offset += length;
-            parser_info->data_len = offset;
+            http_info->data_len = offset;
         }
 
-        parser_info->seg_info.seg_body_data_len[parser_info->seg_info.num_body_segs] = length;
-        parser_info->seg_info.num_body_segs++;
+        http_info->seg_body_data_len[http_info->num_body_segs] = length;
+        http_info->num_body_segs++;
 
     }
     return 0;
@@ -900,21 +910,28 @@ int http_on_body(http_parser *parser, const char *at, size_t length)
 int  http_on_message_complete(http_parser* parser)
 {
     HTTP_PARSER_INFO *parser_info = (HTTP_PARSER_INFO *)parser->data;
-    uint8_t *buf = parser_info->encap_data;
-    uint32_t offset = parser_info->data_len;
+    HTTP_INFO *http_info = parser_info->http_info;
+    uint8_t *buf = NULL;
+    uint32_t offset = 0;
 
     QNSM_DEBUG(QNSM_DBG_M_DPI_HTTP, QNSM_DBG_INFO, "enter\n");
 
     parser_info->parse_state = HTTP_PARSE_FIN;
 
     /*skip response*/
-    if ((NULL == buf) || (HTTP_NOTREQ <= parser->method)) {
+    if ((NULL == http_info) || (0 == parser->method)){
         goto EXIT;
     }
 
+    buf = http_info->encap_data;
+    offset = http_info->data_len;
+
+    if (NULL == buf) {
+        goto EXIT;
+    }
     if ((offset + 1) <= QNSM_DPI_MSG_DATA_LEN) {
         buf[offset] = '\0';
-        parser_info->data_len += 1;
+        http_info->data_len += 1;
     }
 
 EXIT:
@@ -951,11 +968,8 @@ void http_free(void *sess, void *arg)
     *err occured
     *resp parse fin
     */
-    if (http_info->parser_info[DIRECTION_IN].encap_data) {
-        rte_mempool_put(http_data_cache, http_info->parser_info[DIRECTION_IN].encap_data);
-    }
-    if (http_info->parser_info[DIRECTION_OUT].encap_data) {
-        rte_mempool_put(http_data_cache, http_info->parser_info[DIRECTION_OUT].encap_data);
+    if (http_info->encap_data) {
+        rte_mempool_put(http_data_cache, http_info->encap_data);
     }
 
     if (NULL == sess) {

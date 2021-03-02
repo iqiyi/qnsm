@@ -20,6 +20,7 @@
 
 #CFLAGS += -D 
 
+CFLAGS += -DHTTP_PARSER_STRICT=0
 CFLAGS += -include $(ROOTDIR)/include/qnsm_config.h
 
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)

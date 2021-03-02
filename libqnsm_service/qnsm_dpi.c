@@ -126,6 +126,11 @@ inline int32_t qnsm_dpi_prot_cbk(EN_QNSM_DPI_PROTO dpi_proto, QNSM_PACKET_INFO *
     EN_QNSM_DPI_OP_RES result = EN_QNSM_DPI_OP_MAX;
     int32_t ret = 0;
 
+    //eth min len
+    if (64 >= pkt_info->pkt_len) {
+        return ret;
+    }
+
     if (EN_QNSM_DPI_PROTO_MAX <= dpi_proto) {
         return -1;
     }
@@ -141,11 +146,9 @@ inline int32_t qnsm_dpi_prot_cbk(EN_QNSM_DPI_PROTO dpi_proto, QNSM_PACKET_INFO *
             case EN_QNSM_DPI_OP_CONTINUE:
                 continue;
             case EN_QNSM_DPI_OP_STOP: {
-                ret = -1;
                 goto EXIT;
             }
             default: {
-                ret = -1;
                 goto EXIT;
             }
         }
@@ -484,15 +487,31 @@ inline uint32_t qnsm_dpi_encap_tuple(void *msg, QNSM_PACKET_INFO *pkt_info)
     QNSM_DPI_IPV4_TUPLE4 *tuple = msg;
 
     if (EN_QNSM_AF_IPv4 == pkt_info->af) {
-        tuple->saddr.in4_addr.s_addr = pkt_info->v4_src_ip;
-        tuple->daddr.in4_addr.s_addr = pkt_info->v4_dst_ip;
+        if (pkt_info->flowflags & EN_TO_SERVER) {
+            tuple->saddr.in4_addr.s_addr = pkt_info->v4_src_ip;
+            tuple->daddr.in4_addr.s_addr = pkt_info->v4_dst_ip;         
+            tuple->source = pkt_info->sport;
+            tuple->dest = pkt_info->dport;
+        } else {
+            tuple->saddr.in4_addr.s_addr = pkt_info->v4_dst_ip;
+            tuple->daddr.in4_addr.s_addr = pkt_info->v4_src_ip;
+            tuple->source = pkt_info->dport;
+            tuple->dest = pkt_info->sport;          
+        }
     } else {
-        rte_memcpy(tuple->saddr.in6_addr.s6_addr, pkt_info->v6_src_ip, IPV6_ADDR_LEN);
-        rte_memcpy(tuple->daddr.in6_addr.s6_addr, pkt_info->v6_dst_ip, IPV6_ADDR_LEN);
+        if (pkt_info->flowflags & EN_TO_SERVER) {
+            rte_memcpy(tuple->saddr.in6_addr.s6_addr, pkt_info->v6_src_ip, IPV6_ADDR_LEN);
+            rte_memcpy(tuple->daddr.in6_addr.s6_addr, pkt_info->v6_dst_ip, IPV6_ADDR_LEN);
+            tuple->source = pkt_info->sport;
+            tuple->dest = pkt_info->dport;          
+        } else {
+            rte_memcpy(tuple->saddr.in6_addr.s6_addr, pkt_info->v6_dst_ip, IPV6_ADDR_LEN);
+            rte_memcpy(tuple->daddr.in6_addr.s6_addr, pkt_info->v6_src_ip, IPV6_ADDR_LEN);
+            tuple->source = pkt_info->dport;
+            tuple->dest = pkt_info->sport;          
+        }
     }
     tuple->af = EN_QNSM_AF_IPv4;
-    tuple->source = pkt_info->sport;
-    tuple->dest = pkt_info->dport;
     return sizeof(QNSM_DPI_IPV4_TUPLE4);
 }
 
