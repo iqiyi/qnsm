@@ -50,47 +50,40 @@ typedef struct {
 } HTTP_MSG_HEADER;
 
 typedef struct {
-    uint16_t seg_body_data_len[HTTP_BODY_SEGS_MAX];               /*signature for slow post*/
-    uint8_t  num_body_segs;
-    uint8_t  num_hdr_segs;                                        /*signature for slowloris*/
-} HTTP_SEG_INFO;
+	/*http cur seg length*/
+    uint16_t   hp_length;                          
 
-/*
- * storage of http field in common use
- */
-typedef struct {
-    const uint8_t    *sp;                                /*start pointer*/
-    uint16_t   length;                             /*length of this field*/
-} HTTP_FIELD;
-
-typedef struct {
-    uint16_t   hp_length;                          /*http cur seg length*/
-
-    /*save body*/
-    uint16_t body_len;
-    const uint8_t *body_start;
-
-    HTTP_SEG_INFO seg_info;
     uint8_t parse_state;
     uint8_t same_state_cnt;
 
-    /*http encap data*/
-    uint16_t data_len;
-    uint8_t *encap_data;
-
     /*pkt info*/
     void *pkt_info;
+
+	/*http info*/
+	void *http_info;
 
     http_parser parser;
 } __rte_cache_aligned HTTP_PARSER_INFO;
 
 
 typedef struct {
-    uint8_t    *http_hdr;                          /*http header*/
-    uint16_t   direction;                          /*pkt direc*/
+	/* first pkt direc, dst ip is server */
+    uint16_t   direction;	
 
     HTTP_PARSER_INFO parser_info[DIRECTION_MAX];
     //QNSM_SESS  *sess;
+
+    /*http encap data*/
+    uint16_t data_len;
+    uint8_t *encap_data;
+
+    /* body info */
+    uint16_t body_len;
+    const uint8_t *body_start;
+    uint16_t seg_body_data_len[HTTP_BODY_SEGS_MAX];
+	
+	/* signature for slow post */
+    uint8_t  num_body_segs;
 } __rte_cache_aligned HTTP_INFO;
 
 typedef struct {

@@ -12,7 +12,7 @@
     <care_biz>yes</care_biz>
     <sample>
            <enable>yes</enable>
-           <method>packet</method>
+           <method>flow</method>
            <rate>16384</rate>
     </sample>
     <dpi>
