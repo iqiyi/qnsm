@@ -34,6 +34,11 @@ enum en_qnsm_ip_af {
     EN_QNSM_AF_MAX
 };
 
+enum {
+    EN_TO_SERVER = 0x01,
+    EN_TO_CLIENT = 0x10,
+};
+
 struct qnsm_in_addr {
     uint32_t s_addr;
 };
@@ -83,7 +88,7 @@ typedef struct packet_info {
     uint16_t pkt_len;
     uint8_t  lcore_id;       /*rss lcore*/
     uint8_t  direction : 2;
-    uint8_t  sess_dir :  4;
+    uint8_t  flowflags :  4;
     uint8_t  is_frag  :  2;
 
     uint8_t pf:1;            /*passive fingerprint*/

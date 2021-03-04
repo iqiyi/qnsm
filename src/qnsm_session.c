@@ -104,6 +104,8 @@
 #define QNSM_HASH_CRC 1
 #endif
 
+#define QNSM_PKT_INFO_TO_MBUF(info) ((struct rte_mbuf *)(info) - 1)
+
 #ifdef  DEBUG_QNSM
 #define QNSM_SESS_INC_COUNTER(data, counter)  ((QNSM_SESS_DATA *)(data))->counter++
 #define QNSM_SESS_ADD_COUNTER(data, counter, var)  ((QNSM_SESS_DATA *)(data))->counter += (var)
@@ -415,7 +417,6 @@ int32_t qnsm_sess_encap_agg_msg(void *msg, uint32_t *msg_len, void *send_data)
     QNSM_SESS_AGG_MSG *sess_msg = NULL;
     QNSM_SESS_MSG_DATA *data = NULL;
     QNSM_SESS *sess = NULL;
-    //uint32_t socket_id = rte_socket_id();
 
     if ((NULL == send_data) || (NULL == msg)) {
         return 0;
@@ -528,7 +529,7 @@ void qnsm_sess_agg(__attribute__((unused)) struct rte_timer *timer, void *arg)
     }
     QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_WARN, "DIRECTION\t\tPPS\t\t   BPS\n");
 
-    for(direction = 0; direction < EN_QNSM_SESS_DIR_MAX; direction++) {
+    for(direction = 0; direction < DIRECTION_MAX; direction++) {
         statis_info = &(sess->sess_statis[direction]);
 
         /*
@@ -545,7 +546,7 @@ void qnsm_sess_agg(__attribute__((unused)) struct rte_timer *timer, void *arg)
         }
         send_agg_info = 1;
         QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_WARN, "%-8s \t\t%" PRIu64 "   %" PRIu64 "\n",
-                   (direction == EN_QNSM_SESS_DIR_SAME) ? "IN" : "OUT",
+                   (direction == DIRECTION_IN) ? "IN" : "OUT",
                    sess->sess_statis[direction].pps,
                    sess->sess_statis[direction].bps);
     }
@@ -564,7 +565,7 @@ void qnsm_sess_agg(__attribute__((unused)) struct rte_timer *timer, void *arg)
     */
     if (sess->data_que.data_cnt > 8) {
         qnsm_list_for_each_entry_safe(tmp_tcp_data, n, &sess->data_que.tcp_que, node) {
-            rte_pktmbuf_free(tmp_tcp_data->pkt_info->mbuf);
+            rte_pktmbuf_free(QNSM_PKT_INFO_TO_MBUF(tmp_tcp_data->pkt_info));
             tcp_free_data(tmp_tcp_data);
         }
         sess->data_que.data_cnt = 0;
@@ -673,7 +674,7 @@ void qnsm_sess_aging(__attribute__((unused)) struct rte_timer *timer, void *arg)
 
     /*free tcp data*/
     qnsm_list_for_each_entry_safe(tmp_tcp_data, n, &sess->data_que.tcp_que, node) {
-        rte_pktmbuf_free(tmp_tcp_data->pkt_info->mbuf);
+        rte_pktmbuf_free(QNSM_PKT_INFO_TO_MBUF(tmp_tcp_data->pkt_info));
         tcp_free_data(tmp_tcp_data);
     }
     sess->data_que.data_cnt = 0;
@@ -867,10 +868,11 @@ ERR_ADD:
 }
 #endif
 
-inline void qnsm_sess_generate_key(QNSM_PACKET_INFO *pkt_info, QNSM_SESS_ADDR *key)
+inline int32_t qnsm_sess_generate_key(QNSM_PACKET_INFO *pkt_info, QNSM_SESS_ADDR *key)
 {
     uint16_t sport = pkt_info->sport;
     uint16_t dport = pkt_info->dport;
+    int32_t same_dir = 1;
 
     if (EN_QNSM_AF_IPv4 == pkt_info->af) {
         /*v4
@@ -882,25 +884,23 @@ inline void qnsm_sess_generate_key(QNSM_PACKET_INFO *pkt_info, QNSM_SESS_ADDR *k
             key->v4_5tuple.port_src = sport;
             key->v4_5tuple.ip_dst = pkt_info->v4_dst_ip;
             key->v4_5tuple.port_dst = dport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_SAME;
         } else if (pkt_info->v4_src_ip > pkt_info->v4_dst_ip) {
             key->v4_5tuple.ip_src = pkt_info->v4_dst_ip;
             key->v4_5tuple.port_src = dport;
             key->v4_5tuple.ip_dst = pkt_info->v4_src_ip;
             key->v4_5tuple.port_dst = sport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_DIFF;
+            same_dir = 0;
         } else if (sport < dport) {
             key->v4_5tuple.ip_src = pkt_info->v4_src_ip;
             key->v4_5tuple.port_src = sport;
             key->v4_5tuple.ip_dst = pkt_info->v4_dst_ip;
             key->v4_5tuple.port_dst = dport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_SAME;
         } else {
             key->v4_5tuple.ip_src = pkt_info->v4_dst_ip;
             key->v4_5tuple.port_src = dport;
             key->v4_5tuple.ip_dst = pkt_info->v4_src_ip;
             key->v4_5tuple.port_dst = sport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_DIFF;
+            same_dir = 0;
         }
         key->v4_5tuple.proto = pkt_info->proto;
     } else {
@@ -910,13 +910,12 @@ inline void qnsm_sess_generate_key(QNSM_PACKET_INFO *pkt_info, QNSM_SESS_ADDR *k
             key->v6_5tuple.port_src = sport;
             rte_memcpy(key->v6_5tuple.ip_dst, pkt_info->v6_dst_ip, IPV6_ADDR_LEN);
             key->v6_5tuple.port_dst = dport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_SAME;
         } else {
             rte_memcpy(key->v6_5tuple.ip_dst, pkt_info->v6_src_ip, IPV6_ADDR_LEN);
             key->v6_5tuple.port_dst = sport;
             rte_memcpy(key->v6_5tuple.ip_src, pkt_info->v6_dst_ip, IPV6_ADDR_LEN);
             key->v6_5tuple.port_src = dport;
-            pkt_info->sess_dir = EN_QNSM_SESS_DIR_DIFF;
+            same_dir = 0;
         }
         key->v6_5tuple.proto = pkt_info->proto;
     }
@@ -925,7 +924,7 @@ inline void qnsm_sess_generate_key(QNSM_PACKET_INFO *pkt_info, QNSM_SESS_ADDR *k
                sport,
                pkt_info->v4_dst_ip,
                dport);
-    return;
+    return same_dir;
 }
 
 int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte_mbuf *mbuf, QNSM_SESS_VIP_DATA *vip_item)
@@ -937,6 +936,7 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
     QNSM_SESS   *sess = NULL;
     void *app_arg = NULL;
     int32_t ret = 0;
+    int32_t same_dir = 0;
 
     if (NULL == pkt_info) {
         ret = -1;
@@ -944,7 +944,8 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
     }
 
     QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "enter\n");
-    qnsm_sess_generate_key(pkt_info, &sess_key);
+    memset(&sess_key, 0, sizeof(QNSM_SESS_ADDR));
+    same_dir = qnsm_sess_generate_key(pkt_info, &sess_key);
     sess = qnsm_sess_find(pkt_info->af, &sess_key);
     if (NULL == sess) {
         sess = qnsm_sess_add(lcore_id, pkt_info->af, &sess_key);
@@ -970,18 +971,26 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
         sess->data_que.tcp_seq[1] = 0;
 #endif
         sess->vip_item = vip_item;
-        sess->vip_is_src = pkt_info->direction ^ pkt_info->sess_dir;
+        sess->vip_is_src = pkt_info->direction;
+        sess->svr = (same_dir) ? EN_SESS_SVR_IS_DST : EN_SESS_SVR_IS_SRC;
     }
-
+    
+    if (same_dir ^ sess->svr) {
+        pkt_info->flowflags |= EN_TO_SERVER;
+    } else {
+        pkt_info->flowflags |= EN_TO_CLIENT;
+    }
+    
     /*update statis*/
     pkt_len = pkt_info->pkt_len;
 
     /* ¿¼ÂÇÖ¡¼ä¾à20×Ö½Ú */
     pkt_len += 20;
-    sess->sess_statis[pkt_info->sess_dir].pkt_curr++;
-    sess->sess_statis[pkt_info->sess_dir].bit_curr += pkt_len << 3;
-    sess->last_tick = rte_rdtsc();
 
+    /* sess statis */
+    sess->sess_statis[pkt_info->direction].pkt_curr++;
+    sess->sess_statis[pkt_info->direction].bit_curr += pkt_len << 3;
+    sess->last_tick = rte_rdtsc();
     proto = pkt_info->proto;
     switch (proto) {
         case TCP_PROTOCOL: {
@@ -1019,7 +1028,7 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
                 sess->app_parse_info = app_arg;
             }
 
-            ret = tcp_data_proc(pkt_info, &sess->data_que, pkt_info->sess_dir, payload_len);
+            ret = tcp_data_proc(pkt_info, &sess->data_que, (pkt_info->flowflags & EN_TO_SERVER) ? 0 : 1, payload_len);
             if (ret) {
                 break;
             }
@@ -1036,7 +1045,7 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
                     const int len = tcp_data->len - offset;
                     if (len < 0) {
                         QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "!!data len exception!!\n");
-                        rte_pktmbuf_free(tcp_data->pkt_info->mbuf);
+                        rte_pktmbuf_free(QNSM_PKT_INFO_TO_MBUF(tcp_data->pkt_info));
                         tcp_free_data(tcp_data);
                         sess->data_que.data_cnt--;
                         continue;
@@ -1044,7 +1053,7 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
 
                     (void)qnsm_dpi_prot_cbk(sess->app_proto, tcp_data->pkt_info, sess, sess->app_parse_info);
                     sess->data_que.tcp_seq[data_dir] += len;
-                    QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "(%p %u %p %u) dir %u seq: %u\n",
+                    QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "(0x%x %u 0x%x %u) dir %u seq: %u\n",
                                tcp_data->pkt_info->v4_src_ip,
                                tcp_data->pkt_info->sport,
                                tcp_data->pkt_info->v4_dst_ip,
@@ -1054,15 +1063,16 @@ int32_t  qnsm_sess_proc(QNSM_PACKET_INFO *pkt_info, int32_t lcore_id, struct rte
 
                     /*free resource*/
                     (void)qnsm_port_tx_lb((DIRECTION_IN == tcp_data->pkt_info->direction) ? (tcp_data->pkt_info->v4_dst_ip) : (tcp_data->pkt_info->v4_src_ip),
-                                          tcp_free_data(tcp_data);
-                                          sess->data_que.data_cnt--;
-                                          QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "(%p %u %p %u) data_cnt %u sess %p\n\n",
-                                                     tcp_data->pkt_info->v4_src_ip,
-                                                     tcp_data->pkt_info->sport,
-                                                     tcp_data->pkt_info->v4_dst_ip,
-                                                     tcp_data->pkt_info->dport,
-                                                     sess->data_que.data_cnt,
-                                                     sess);
+                        QNSM_PKT_INFO_TO_MBUF(tcp_data->pkt_info));
+                    tcp_free_data(tcp_data);
+                    sess->data_que.data_cnt--;
+                    QNSM_DEBUG(QNSM_DBG_M_SESS, QNSM_DBG_INFO, "(0x%x %u 0x%x %u) data_cnt %u sess %p\n\n",
+                               tcp_data->pkt_info->v4_src_ip,
+                               tcp_data->pkt_info->sport,
+                               tcp_data->pkt_info->v4_dst_ip,
+                               tcp_data->pkt_info->dport,
+                               sess->data_que.data_cnt,
+                               sess);
                 }
             }
 #else
@@ -1183,15 +1193,6 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     pkt_info = (QNSM_PACKET_INFO *)(mbuf + 1);
     data_len = rte_pktmbuf_pkt_len(mbuf);
 
-#ifdef __DDOS
-    if (qnsm_parse_ptype(mbuf))
-#else
-    if (qnsm_decode_ethernet(pkt_info, rte_pktmbuf_mtod(mbuf, uint8_t *), data_len))
-#endif
-    {
-        goto FREE;
-    }
-
     /*get mbuf private data*/
     pkt_info->lcore_id = lcore_id;
     pkt_info->dpi_app_prot = EN_QNSM_DPI_PROTO_MAX;
@@ -1202,11 +1203,14 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     uint8_t          direction = DIRECTION_MAX;
     uint8_t session_enable = 0;
 
-    if (1 != app_data->pkt_pass) {
-        app_data->pkt_pass--;
-    } else {
+    if (qnsm_parse_ptype(mbuf))
+    {
+        goto FREE;
+    }
+
+    if ((1 < app_data->flow_sample_rate) && 
+        (0 == (uint32_t)(((uint64_t)mbuf->hash.rss * app_data->flow_sample_rate) >> 32))) {
         session_enable = 1;
-        app_data->pkt_pass = app_data->pkt_sample_rate;
     }
 
     /*
@@ -1264,6 +1268,10 @@ void qnsm_rx_proc(void *this_app_data, uint32_t lcore_id, struct rte_mbuf *mbuf)
     }
 
 #else
+    if (qnsm_decode_ethernet(pkt_info, rte_pktmbuf_mtod(mbuf, uint8_t *), data_len))
+    {
+        goto FREE;
+    }
 
     pos = mbuf->hash.rss;
     QNSM_SESS_INC_COUNTER(this_app_data, inner_pkt_counter);
@@ -1309,8 +1317,8 @@ void qnsm_sess_sample_init(QNSM_SESS_DATA *data)
 {
     QNSM_SESSM_CFG *sess_cfg = qnsm_get_sessm_conf();
 
-    data->pkt_sample_rate = 1;
-    data->flow_sample_rate = 1;
+    data->pkt_sample_rate = 1024;
+    data->flow_sample_rate = 1024;
     if (sess_cfg->sample_enable) {
         switch(sess_cfg->sample_method) {
             case EN_QNSM_PACKET_SAMPLE:
@@ -1588,7 +1596,7 @@ static void cmd_show_sess_parsed(void *parsed_result,
                 prev_tcp_cnt = tcp_sess_cnt;
                 prev_udp_cnt = udp_sess_cnt;
                 qnsm_sess_iter_v6(cl, pipeline_para, lcore_id, EN_ITER_SESS_PROTO, cmd_show_sess_proto, NULL);
-                cmdline_printf(cl, "lcore %u tcp_sess(v6) %" PRIu64 "udp_sess %" PRIu64 "\n",
+                cmdline_printf(cl, "lcore %u tcp_sess(v6) %" PRIu64 " udp_sess %" PRIu64 "\n",
                                lcore_id,
                                tcp_sess_cnt - prev_tcp_cnt,
                                udp_sess_cnt - prev_udp_cnt);
@@ -1599,7 +1607,7 @@ static void cmd_show_sess_parsed(void *parsed_result,
                 /*inner & outer pkts counter*/
                 this = qnsm_cmd_app_data(pipeline_para, EN_QNSM_SESSM);
                 cmdline_printf(cl, "lcore %u inner pkts %" PRIu64 " outer pkts %" PRIu64
-                               " filter pkts %" PRIu64 "bits %" PRIu64 " pps %" PRIu64 " bps %" PRIu64 "\n",
+                               " filter pkts %" PRIu64 " bits %" PRIu64 " pps %" PRIu64 " bps %" PRIu64 "\n",
                                lcore_id,
                                this->inner_pkt_counter,
                                this->outer_pkt_counter,

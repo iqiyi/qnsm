@@ -52,17 +52,23 @@ typedef enum {
     EN_ITER_SESS_PROTO,
 } EN_ITER_SESS_TYPE;
 
+enum {
+    EN_SESS_SVR_IS_DST = 0,
+    EN_SESS_SVR_IS_SRC,
+};
+
 typedef struct {
     QNSM_SESS_ADDR key;
     uint8_t af:4;
-    uint8_t vip_is_src:4;
+    uint8_t vip_is_src:2;
+    uint8_t svr:2;
     uint8_t vip_agg_pkt_type;
     uint8_t tcp_flags[DIRECTION_MAX];
     uint8_t icmp_type[DIRECTION_MAX];
     void *vip_item;
 
     /*statis data*/
-    QNSM_FLOW_STATISTICS            sess_statis[EN_QNSM_SESS_DIR_MAX];
+    QNSM_FLOW_STATISTICS            sess_statis[DIRECTION_MAX];
     uint64_t                        last_tick;
 #ifdef __FLOW_LIFE_STATTIS
     uint64_t                        begin_time;
