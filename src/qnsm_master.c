@@ -760,6 +760,11 @@ int32_t qnsm_master_init(void)
     uint16_t lcore_id = 0;
     void *kafka_cfg = NULL;
     int32_t ret = 0;
+    int s,i;
+    pthread_t tid;
+    int total = get_nprocs();
+    cpu_set_t cpuself;
+    cpu_set_t cpuused;
 
     /*data init*/
     master_data = qnsm_app_inst_init(sizeof(QNSM_MASTER_DATA),
@@ -810,6 +815,28 @@ int32_t qnsm_master_init(void)
 #undef XX
     };
 
+    CPU_ZERO(&cpuself);
+    if (sched_getaffinity(0, sizeof(cpuself), &cpuself) == -1) {
+        printf("get CPU affinity failue, ERROR:%s\n", strerror(errno));
+        return -1;
+    }
+    tid = pthread_self();
+
+    CPU_ZERO(&cpuused);
+
+    for(i=0; i<total; i++){
+        if( rte_lcore_is_enabled(i) &&
+            (lcore_config[i].thread_id != 0 || i == rte_get_master_lcore()) )
+            continue;
+        CPU_OR(&cpuused, &cpuused, &lcore_config[i].cpuset);
+    }
+ 
+    s = pthread_setaffinity_np(tid, sizeof(cpuused), &cpuused);
+    if (s != 0) {
+        RTE_LOG(ERR, EAL, "pthread_setaffinity_np failed\n");
+        return -1;
+    }
+
     kafka_cfg = qnsm_get_kafka_cfg(kafka_inst[QNSM_MASTER_PROD_KAFKA]);
     if (kafka_cfg) {
         (void)qnsm_kafka_app_init_producer(kafka_cfg);
@@ -820,7 +847,13 @@ int32_t qnsm_master_init(void)
         (void)qnsm_kafka_app_init_consumer(qnsm_get_edge_conf()->dc_name, kafka_cfg);
         qnsm_kafka_msg_reg(QNSM_KAFKA_CMD_TOPIC, qnsm_master_kafka_cmd_msg_cons);
     }
-
+    
+    s = pthread_setaffinity_np(tid, sizeof(cpuself), &cpuself);
+    if (s != 0) {
+        RTE_LOG(ERR, EAL, "pthread_setaffinity_np failed\n");
+        return -1;
+    }
+    
     ret = rte_timer_reset(&master_data->syn_clock,
                           rte_get_timer_hz(), PERIODICAL,
                           rte_lcore_id(), qnsm_master_clock_syn_timer, NULL);
